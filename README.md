@@ -90,7 +90,7 @@ Sin credenciales todo queda apagado y la app sigue funcionando como Fase 1 (señ
    - `recordatorio_turno`: «Hola {{1}}! Te recordamos tu turno en {{2}}: {{3}}. Respondé SÍ para confirmar o NO para cancelar.»
    - `codigo_login`: «Tu código para entrar al panel es {{1}}. Vence en 10 minutos.»
 4. Lo que hace: confirmación al reservar; **recordatorio automático** (`/api/cron/recordatorios`, lo dispara el cron de `vercel.json` cada hora con `CRON_SECRET`) según las horas que cada local configuró; el cliente responde **SÍ → queda confirmado** / **NO → se cancela**; y login del dueño por WhatsApp (“Mandármelo por WhatsApp” si cargó su número). Cada local puede apagarlo en Configurar.
-5. Ojo: el cron **horario** requiere plan Pro de Vercel (en Hobby solo corre 1 vez por día). El botón manual “Recordar por WhatsApp” (wa.me) sigue disponible como respaldo.
+5. El cron está en 1 vez por día (12:00 UTC = 9:00 AR) porque el plan Hobby de Vercel no permite más. Con plan Pro, cambiá `vercel.json` a `"0 * * * *"` (cada hora). El botón manual “Recordar por WhatsApp” (wa.me) sigue disponible como respaldo.
 6. Costos: los mensajes iniciados por el negocio los cobra Meta por conversación; conviene sumarlo al precio.
 
 Probado con simuladores de MP y WhatsApp (`MP_API_URL` / `WA_API_URL` permiten apuntar a uno): conexión OAuth, cobro, webhook (incluido pago por monto menor y local ajeno), confirmación, cron, respuestas SÍ/NO y firma/verificación.
