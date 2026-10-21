@@ -28,7 +28,7 @@ function cargarLogo(file: File): Promise<string> {
 
 type Nota = { txt: string; tipo: "" | "ok" | "mal" };
 
-export default function Configurar({ ficha, onGuardada }: { ficha: Ficha; onGuardada: (f: Ficha) => void }) {
+export default function Configurar({ ficha, integ, onGuardada }: { ficha: Ficha; integ: { mp: boolean; wa: boolean }; onGuardada: (f: Ficha) => void }) {
   const [b, setB] = useState<Ficha>(() => structuredClone(ficha));
   const [nota, setNota] = useState<Nota>({ txt: "", tipo: "" });
   const [cambiarRubro, setCambiarRubro] = useState<string | null>(null);
@@ -53,6 +53,12 @@ export default function Configurar({ ficha, onGuardada }: { ficha: Ficha; onGuar
   const descartar = () => { setB(structuredClone(ficha)); aplicarMarca(ficha.color); setNota({ txt: "", tipo: "" }); };
 
   const sn = b.sena, pct = sn.tipo === "porcentaje";
+  const mpEstado = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("mp") : null;
+  async function desconectarMp() {
+    if (!confirm("¿Desconectar Mercado Pago? Las señas vuelven a ser por transferencia.")) return;
+    await fetch("/api/panel/mp/desconectar", { method: "POST" });
+    onGuardada({ ...ficha, mpConectado: false }); setB((x) => ({ ...x, mpConectado: false }));
+  }
   const link = typeof window !== "undefined" ? window.location.origin + "/t/" + ficha.slug : "/t/" + ficha.slug;
 
   return (
@@ -146,6 +152,17 @@ export default function Configurar({ ficha, onGuardada }: { ficha: Ficha; onGuar
           <label className="c">Premio cada cuántas visitas<input className="num" type="number" min={2} max={100} value={b.fidelidad.cadaCuantos} onChange={(e) => upd((x) => { x.fidelidad.cadaCuantos = Number(e.target.value); })} /></label>
           <label className="c">Premio (ej. “un corte gratis”)<input value={b.fidelidad.premio} autoComplete="off" onChange={(e) => upd((x) => { x.fidelidad.premio = e.target.value; })} /></label>
         </div>}
+      </section>
+
+      <section className="bloque"><h3>9 · Mercado Pago y WhatsApp</h3>
+        <p className="sub">Conectá tu Mercado Pago para cobrar la seña en el momento: el cliente paga desde el chat, te entra directo a tu cuenta y la agenda la marca como recibida sola.</p>
+        {mpEstado === "ok" && <p className="nota ok">¡Mercado Pago conectado!</p>}
+        {mpEstado === "error" && <p className="nota mal">No pudimos conectar Mercado Pago. Probá de nuevo.</p>}
+        {b.mpConectado
+          ? <div className="acciones"><span className="nota ok">✓ Mercado Pago conectado</span><button type="button" className="btn peligro" onClick={desconectarMp}>Desconectar</button></div>
+          : <div className="acciones"><a className="btn pri" href="/api/panel/mp/conectar" aria-disabled={!integ.mp} style={integ.mp ? undefined : { opacity: 0.5, pointerEvents: "none" }}>Conectar Mercado Pago</a>{!integ.mp && <span className="nota">Todavía no está habilitado en esta instalación.</span>}</div>}
+        <label className="check"><input type="checkbox" checked={b.whatsappAuto} onChange={(e) => upd((x) => { x.whatsappAuto = e.target.checked; })} /> WhatsApp automático: confirmación al reservar y recordatorio antes del {b.palabra}</label>
+        <p className="nota">{integ.wa ? "Los mensajes salen desde el número de WEBI a nombre de tu local; si el cliente responde SÍ, queda confirmado. " : "WhatsApp automático todavía no está habilitado en esta instalación: mientras tanto usá el botón “Recordar por WhatsApp” de la agenda. "}Tu WhatsApp (arriba) es al que escriben los clientes que piden hablar con una persona.</p>
       </section>
 
       <div className="pie-guardar">

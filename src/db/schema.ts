@@ -26,6 +26,11 @@ export const locales = pgTable("locales", {
   sena: jsonb("sena").$type<Sena>().notNull(),
   fidelidad: jsonb("fidelidad").$type<Fidelidad>().notNull(),
   estadoSuscripcion: text("estado_suscripcion").notNull().default("prueba"), // prueba | activa | vencida | cancelada
+  whatsappAuto: boolean("whatsapp_auto").notNull().default(true), // recordatorios y confirmaciones automáticas por WhatsApp
+  mpUserId: text("mp_user_id"),
+  mpAccessToken: text("mp_access_token"), // cifrado (ver server/cripto.ts)
+  mpRefreshToken: text("mp_refresh_token"), // cifrado
+  mpExpira: timestamp("mp_expira", { withTimezone: true }),
   creado: timestamp("creado", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -105,6 +110,7 @@ export const turnos = pgTable(
     pago: text("pago"),
     senaMonto: integer("sena_monto").notNull().default(0),
     senaEstado: text("sena_estado").notNull().default("no"), // no | pendiente | declarada | recibida
+    mpPagoId: text("mp_pago_id"), // id del pago en Mercado Pago cuando la seña se cobró por ahí
     confirmado: boolean("confirmado").notNull().default(false),
     recordado: timestamp("recordado", { withTimezone: true }),
     origen: text("origen").notNull().default("chat"), // chat | local

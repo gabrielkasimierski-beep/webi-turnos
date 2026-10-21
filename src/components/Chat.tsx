@@ -331,18 +331,25 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
       bot(["¡Gracias! 🙌 Le avisamos al local: ahí verifican la seña y te la confirman."]); volver();
     };
     const cancelar = async () => { await accion(t.id, tel, "cancelar"); bot(["Listo, no te cobro nada y liberé el lugar. Cuando quieras lo sacás de nuevo 👍"]); volver(); };
+    const pagarMp = async () => {
+      const r = await api<{ url: string }>(`/turno/${t.id}/pagar`, { tel });
+      if (r.ok) burbuja("bot", 'Tocá acá: <a href="' + escA(r.url) + '" target="_blank" rel="noopener">Pagar la seña con Mercado Pago</a><br>Cuando termines, volvé y tocá “Ya pagué”.');
+      else burbuja("bot", esc(r.motivo || "No pude generar el link."));
+      opciones();
+    };
     const copiar = async () => {
       let ok = false; try { await navigator.clipboard.writeText(alias); ok = true; } catch { /* sin portapapeles */ }
       burbuja("bot", (ok ? "Alias copiado: " : "Este es el alias: ") + "<b>" + esc(alias) + "</b>"); opciones();
     };
     function opciones() {
-      chipsSet([
-        { texto: "Ya la transferí", lleno: true, hacer: ya },
+      chipsSet(([
+        { texto: F().mpConectado ? "Ya pagué" : "Ya la transferí", lleno: true, hacer: ya },
+        F().mpConectado ? { texto: "Pagar con Mercado Pago", eco: false, hacer: pagarMp } : null,
         url ? { texto: "Abrir link de pago", eco: false, hacer: () => { burbuja("bot", 'Tocá acá: <a href="' + escA(url) + '" target="_blank" rel="noopener">Pagar la seña</a>'); opciones(); } }
           : { texto: "Copiar alias", eco: false, hacer: copiar },
         oblig ? { texto: "Cancelar el " + palabra(), hacer: cancelar }
           : { texto: "La pago después", hacer: () => { bot(["Dale, el lugar queda anotado. Mandá la seña antes de venir para dejarlo firme."]); volver(); } },
-      ]);
+      ] as (Chip | null)[]).filter((c): c is Chip => !!c));
     }
     setTimeout(opciones, 760);
   }

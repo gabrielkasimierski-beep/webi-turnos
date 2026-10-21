@@ -21,7 +21,7 @@ function aFicha(l: FilaLocal, rs: (typeof recursos.$inferSelect)[], ss: (typeof 
     recursos: rs.sort((a, b) => a.orden - b.orden).map((r) => ({ id: r.id, nombre: r.nombre })),
     servicios: ss.sort((a, b) => a.orden - b.orden).map((s) => ({ id: s.id, nombre: s.nombre, precio: s.precio, duracion: s.duracion, alias: s.alias, sena: s.sena })),
     horarios: l.horarios, faqs: l.faqs, intervalo: l.intervalo, anticipacion: l.anticipacion,
-    recordatorioHoras: l.recordatorioHoras, pedirConfirmacion: l.pedirConfirmacion, sena: l.sena, fidelidad: l.fidelidad,
+    recordatorioHoras: l.recordatorioHoras, pedirConfirmacion: l.pedirConfirmacion, sena: l.sena, fidelidad: l.fidelidad, whatsappAuto: l.whatsappAuto, mpConectado: !!l.mpAccessToken,
   };
 }
 
@@ -54,7 +54,7 @@ export async function guardarFicha(localId: string, f: Ficha) {
     nombre: f.nombre, rubro: f.rubro, rubroClave: f.rubroClave, color: f.color, logo: f.logo, direccion: f.direccion,
     whatsapp: f.whatsapp, instagram: f.instagram, horarios: f.horarios, intervalo: f.intervalo, anticipacion: f.anticipacion,
     palabra: f.palabra, recurso: f.recurso, faqs: f.faqs, recordatorioHoras: f.recordatorioHoras,
-    pedirConfirmacion: f.pedirConfirmacion, sena: f.sena, fidelidad: f.fidelidad,
+    pedirConfirmacion: f.pedirConfirmacion, sena: f.sena, fidelidad: f.fidelidad, whatsappAuto: f.whatsappAuto,
   }).where(eq(locales.id, localId));
 
   const idsR = f.recursos.map((r) => r.id), idsS = f.servicios.map((s) => s.id);
@@ -247,3 +247,49 @@ export async function entregarPremio(localId: string, tel: string, fid: Ficha["f
   return { ...r, premiosEntregados: r.premiosEntregados + 1 };
 }
 
+
+/* ---------- integraciones ---------- */
+/** Un turno pendiente con seña por pagar, solo si el teléfono es el del cliente. */
+export async function turnoConSenaDeCliente(localId: string, id: string, tel: string) {
+  const clave = telClave(tel); if (!clave) return null;
+  const db = await getDb();
+  const [t] = await db.select().from(turnos).where(and(eq(turnos.id, id), eq(turnos.localId, localId), eq(turnos.telClave, clave), eq(turnos.estado, "pendiente")));
+  return t && t.senaMonto > 0 && t.senaEstado !== "recibida" ? aTurno(t) : null;
+}
+
+/** Turnos de todos los locales que toca recordar ahora (para el cron). Cada uno trae lo necesario para armar el mensaje. */
+export async function turnosParaRecordarAhora() {
+  const db = await getDb(), ahora = ahoraAR();
+  const hasta = new Date(ahora); hasta.setDate(hasta.getDate() + 3);
+  const filas = await db.select({ t: turnos, nombreLocal: locales.nombre, horas: locales.recordatorioHoras, auto: locales.whatsappAuto, estado: locales.estadoSuscripcion })
+    .from(turnos).innerJoin(locales, eq(turnos.localId, locales.id))
+    .where(and(eq(turnos.estado, "pendiente"), sql`${turnos.recordado} is null`, gte(turnos.fecha, hoyIso(ahora)), sql`${turnos.fecha} <= ${iso(hasta)}`, sql`${turnos.telClave} <> ''`));
+  return filas.filter((x) => {
+    if (!x.auto || x.estado === "cancelada" || x.estado === "vencida") return false;
+    const ini = desdeIso(x.t.fecha); ini.setMinutes(aMin(x.t.hora));
+    const dt = +ini - +ahora;
+    return dt > 0 && dt <= x.horas * 36e5;
+  }).map((x) => ({ turno: aTurno(x.t), nombreLocal: x.nombreLocal, localId: x.t.localId }));
+}
+export async function marcarRecordado(localId: string, id: string) {
+  const db = await getDb();
+  await db.update(turnos).set({ recordado: new Date() }).where(and(eq(turnos.id, id), eq(turnos.localId, localId)));
+}
+
+/** Respuesta por WhatsApp (“sí” / “no”): actúa sobre el próximo turno pendiente de ese teléfono que ya recibió el recordatorio. */
+export async function responderPorTelefono(tel: string, accion: "confirmar" | "cancelar") {
+  const clave = telClave(tel); if (!clave) return null;
+  const db = await getDb(), ahora = ahoraAR();
+  const filas = await db.select({ t: turnos, nombreLocal: locales.nombre }).from(turnos).innerJoin(locales, eq(turnos.localId, locales.id))
+    .where(and(eq(turnos.telClave, clave), eq(turnos.estado, "pendiente"), sql`${turnos.recordado} is not null`, gte(turnos.fecha, hoyIso(ahora))))
+    .orderBy(asc(turnos.fecha), asc(turnos.hora)).limit(1);
+  const f = filas[0]; if (!f) return null;
+  await db.update(turnos).set(accion === "confirmar" ? { confirmado: true } : { estado: "cancelado" }).where(eq(turnos.id, f.t.id));
+  return { turno: aTurno(f.t), nombreLocal: f.nombreLocal };
+}
+
+export async function usuarioPorMail(mail: string) {
+  const db = await getDb();
+  const [u] = await db.select().from(usuarios).where(eq(usuarios.mail, mail.trim().toLowerCase())).limit(1);
+  return u || null;
+}

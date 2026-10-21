@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { avisarReserva } from "@/server/whatsapp";
 import { conLocal, error, json } from "@/server/http";
 import { reservar, turnoAtendidoManual, turnosDelLocal } from "@/server/repo";
 
@@ -18,5 +20,6 @@ export async function POST(req: Request) {
     return json(r, r.ok ? 200 : 400);
   }
   const r = await reservar(l.localId, { ...base, recursoId: String(b.recursoId || ""), origen: "local" });
+  if (r.ok) after(() => avisarReserva(r.t, l.ficha));
   return json(r, r.ok ? 200 : 409);
 }

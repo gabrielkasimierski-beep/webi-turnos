@@ -51,6 +51,7 @@ export function validarFicha(entrada: Ficha, actual: Ficha): { ok: true; ficha: 
       pedirConfirmacion: e.pedirConfirmacion !== false,
       sena: { activa: !!sn.activa, obligatoria: !!sn.obligatoria, tipo: pct ? "porcentaje" : "fijo", monto: Math.round(monto), alias: txt(sn.alias, 100), nota: txt(sn.nota, 160) },
       fidelidad: { activa: !!fid.activa, cadaCuantos: num(fid.cadaCuantos, 2, 100, 5), premio: txt(fid.premio, 80) },
+      whatsappAuto: e.whatsappAuto !== false, mpConectado: actual.mpConectado,
     },
   };
 }

@@ -7,6 +7,7 @@ import { createHash, createHmac, randomInt, timingSafeEqual } from "node:crypto"
 import { cookies } from "next/headers";
 import { and, desc, eq, gt } from "drizzle-orm";
 import { getDb, schema } from "@/db";
+import { enviarCodigoWa, waDisponible } from "./whatsapp";
 
 const { usuarios, codigosLogin } = schema;
 export const COOKIE = "turnos_sesion";
@@ -57,26 +58,28 @@ export async function cerrarSesion() { (await cookies()).delete(COOKIE); }
    Mientras tanto el código se loguea en la consola del servidor. */
 export type Canal = "mail" | "whatsapp";
 async function enviarCodigo(canal: Canal, destino: string, codigo: string) {
-  if (canal === "mail") {
-    console.log(`\n[OTP] Código de ingreso para ${destino}: ${codigo}  (válido 10 min)\n`);
-    return;
-  }
-  throw new Error("Canal no implementado todavía: " + canal);
+  if (canal === "whatsapp") { await enviarCodigoWa(destino, codigo); return; }
+  console.log(`
+[OTP] Código de ingreso para ${destino}: ${codigo}  (válido 10 min)
+`);
 }
 
 /** Pide un código para un mail. Responde igual exista o no el usuario (no se revela quién es cliente). */
 export async function pedirCodigo(mailCrudo: string, canal: Canal = "mail") {
   const mail = normMail(mailCrudo);
   const db = await getDb();
-  const [u] = await db.select({ id: usuarios.id }).from(usuarios).where(eq(usuarios.mail, mail)).limit(1);
+  const [u] = await db.select({ id: usuarios.id, whatsapp: usuarios.whatsapp }).from(usuarios).where(eq(usuarios.mail, mail)).limit(1);
   if (!u) return { enviado: true }; // silencio a propósito
+  // por WhatsApp solo si el usuario cargó su número y WhatsApp está configurado; si no, vuelve al mail
+  const porWa = canal === "whatsapp" && !!u.whatsapp && waDisponible();
+  if (canal === "whatsapp" && !porWa) canal = "mail";
   // freno simple: máximo 1 código por minuto por destino
   const [ultimo] = await db.select().from(codigosLogin).where(eq(codigosLogin.destino, mail)).orderBy(desc(codigosLogin.creado)).limit(1);
   if (ultimo && Date.now() - ultimo.creado.getTime() < 60_000) return { enviado: true, espera: true };
   const codigo = String(randomInt(0, 1_000_000)).padStart(6, "0");
   await db.insert(codigosLogin).values({ id: crypto.randomUUID(), destino: mail, canal, hash: hashCodigo(mail, codigo), expira: new Date(Date.now() + VIGENCIA_CODIGO_MS) });
-  await enviarCodigo(canal, mail, codigo);
-  return { enviado: true, devCodigo: process.env.NODE_ENV !== "production" ? codigo : undefined };
+  await enviarCodigo(canal, canal === "whatsapp" ? u.whatsapp : mail, codigo);
+  return { enviado: true, canal, devCodigo: process.env.NODE_ENV !== "production" ? codigo : undefined };
 }
 
 /** Verifica el código y, si está bien, devuelve el usuario. Cada código sirve una sola vez y tiene 5 intentos. */
@@ -91,4 +94,17 @@ export async function verificarCodigo(mailCrudo: string, codigo: string): Promis
   if (!bien) return null;
   const [u] = await db.select().from(usuarios).where(eq(usuarios.mail, mail)).limit(1);
   return u ? { usuarioId: u.id, localId: u.localId, rol: u.rol } : null;
+}
+
+/* ---------- estado firmado para el OAuth de Mercado Pago (lleva el local, vence en 15 min) ---------- */
+export function firmarEstado(localId: string) {
+  const cuerpo = Buffer.from(JSON.stringify({ l: localId, exp: Date.now() + 15 * 60_000 })).toString("base64url");
+  return cuerpo + "." + firmar("estado|" + cuerpo);
+}
+export function leerEstado(estado: string): string | null {
+  const [cuerpo, firma] = estado.split(".");
+  if (!cuerpo || !firma) return null;
+  const esperada = firmar("estado|" + cuerpo);
+  if (firma.length !== esperada.length || !timingSafeEqual(Buffer.from(firma), Buffer.from(esperada))) return null;
+  try { const d = JSON.parse(Buffer.from(cuerpo, "base64url").toString()); return d.exp > Date.now() ? (d.l as string) : null; } catch { return null; }
 }

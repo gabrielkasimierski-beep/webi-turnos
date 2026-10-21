@@ -1,3 +1,5 @@
+import { after } from "next/server";
+import { avisarReserva } from "@/server/whatsapp";
 import { conSlug, error, json } from "@/server/http";
 import { reservar } from "@/server/repo";
 
@@ -11,5 +13,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     servicioId: String(b.servicioId || ""), recursoId: b.recursoId ? String(b.recursoId) : null,
     fecha: String(b.fecha || ""), hora: String(b.hora || ""), nombre: b.nombre, tel: b.tel, origen: "chat",
   });
+  if (r.ok) after(() => avisarReserva(r.t, loc.ficha));
   return json(r, r.ok ? 200 : 409);
 }

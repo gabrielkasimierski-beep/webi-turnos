@@ -6,7 +6,7 @@ import { aplicarMarca } from "@/lib/html";
 import Agenda from "./Agenda";
 import Configurar from "./Configurar";
 
-export default function Panel({ fichaInicial }: { fichaInicial: Ficha }) {
+export default function Panel({ fichaInicial, integ }: { fichaInicial: Ficha; integ: { mp: boolean; wa: boolean } }) {
   const [ficha, setFicha] = useState(fichaInicial);
   const [cara, setCara] = useState<"agenda" | "configurar">("agenda");
   useEffect(() => { aplicarMarca(ficha.color); }, [ficha.color]);
@@ -24,7 +24,7 @@ export default function Panel({ fichaInicial }: { fichaInicial: Ficha }) {
       </div>
       <div className="marco" style={{ width: "min(760px,100%)" }}>
         <section className="vista">
-          {cara === "agenda" ? <Agenda ficha={ficha} /> : <Configurar ficha={ficha} onGuardada={setFicha} />}
+          {cara === "agenda" ? <Agenda ficha={ficha} /> : <Configurar ficha={ficha} integ={integ} onGuardada={setFicha} />}
         </section>
       </div>
     </>

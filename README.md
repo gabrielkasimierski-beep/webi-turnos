@@ -71,11 +71,33 @@ En producción la app **exige** `DATABASE_URL` y `SESSION_SECRET` (si faltan, fa
 - **Seña manual:** el cliente ve el alias y avisa “ya la transferí” → el local la marca como recibida.
 - **Fidelidad:** contador de visitas atendidas por teléfono; el local configura premio y cada cuántas visitas; en la agenda ve cuándo hay premio para entregar. El cliente lo consulta en el chat (“Mis visitas y premio”).
 
+## Fase 2: Mercado Pago y WhatsApp (ya está el código; faltan tus credenciales)
+
+Sin credenciales todo queda apagado y la app sigue funcionando como Fase 1 (seña por transferencia, link wa.me). El panel muestra “todavía no está habilitado” hasta que cargues las variables.
+
+### Mercado Pago (cada local conecta su cuenta)
+1. https://www.mercadopago.com.ar/developers → **Tus integraciones → Crear aplicación** → Checkout Pro.
+2. En la app: **Redirect URL** = `<NEXT_PUBLIC_BASE_URL>/api/mp/callback`. Copiá *Client ID* y *Client Secret* → `MP_CLIENT_ID`, `MP_CLIENT_SECRET`.
+3. (Recomendado) Webhooks → copiá la clave secreta a `MP_WEBHOOK_SECRET` (valida la firma de los avisos). La URL de notificación la manda la app en cada cobro.
+4. Cada dueño entra a **Configurar → 9 · Mercado Pago** y toca **Conectar**: autoriza en MP y vuelve. Sus tokens se guardan **cifrados** (AES-GCM, clave de `SESSION_SECRET`/`TOKEN_KEY`) y se renuevan solos.
+5. Desde ahí, el cliente ve “Pagar con Mercado Pago” en el chat; la plata va **directo a la cuenta del local** y el webhook marca la seña como recibida (se verifica el pago consultándolo a MP y que el monto cubra la seña). Si el cliente prefiere, sigue pudiendo transferir.
+
+### WhatsApp (un número de WEBI para todos)
+1. Meta for Developers → app tipo *Business* → producto **WhatsApp** → conseguí un número, el *Phone number ID* y un *token permanente* (usuario del sistema) → `WA_PHONE_ID`, `WA_TOKEN`.
+2. Webhook: URL `<BASE>/api/wa/webhook`, verify token = el que pongas en `WA_VERIFY_TOKEN`, suscribite a *messages*. El *App Secret* va en `WA_APP_SECRET` (valida la firma).
+3. Creá y mandá a aprobar estas **plantillas** (categoría *Utility*, idioma *es_AR*, nombres exactos o cambiá `WA_TPL_*`):
+   - `confirmacion_turno`: «Hola {{1}}! Tu turno en {{2}} quedó anotado: {{3}}. Si no podés venir, avisanos.»
+   - `recordatorio_turno`: «Hola {{1}}! Te recordamos tu turno en {{2}}: {{3}}. Respondé SÍ para confirmar o NO para cancelar.»
+   - `codigo_login`: «Tu código para entrar al panel es {{1}}. Vence en 10 minutos.»
+4. Lo que hace: confirmación al reservar; **recordatorio automático** (`/api/cron/recordatorios`, lo dispara el cron de `vercel.json` cada hora con `CRON_SECRET`) según las horas que cada local configuró; el cliente responde **SÍ → queda confirmado** / **NO → se cancela**; y login del dueño por WhatsApp (“Mandármelo por WhatsApp” si cargó su número). Cada local puede apagarlo en Configurar.
+5. Ojo: el cron **horario** requiere plan Pro de Vercel (en Hobby solo corre 1 vez por día). El botón manual “Recordar por WhatsApp” (wa.me) sigue disponible como respaldo.
+6. Costos: los mensajes iniciados por el negocio los cobra Meta por conversación; conviene sumarlo al precio.
+
+Probado con simuladores de MP y WhatsApp (`MP_API_URL` / `WA_API_URL` permiten apuntar a uno): conexión OAuth, cobro, webhook (incluido pago por monto menor y local ajeno), confirmación, cron, respuestas SÍ/NO y firma/verificación.
+
 ## Pendientes (TODO claros)
 
 - **Envío real del código por mail** — hoy se loguea en la consola del servidor (`enviarCodigo` en `src/server/auth.ts`). Falta conectar Resend/Postmark (`RESEND_API_KEY`, `MAIL_FROM`) y, si se quiere, un link mágico en el mismo mail.
-- **OTP por WhatsApp (Fase 2):** la estructura está lista (`canal` en `codigos_login`, `usuarios.whatsapp`, `Canal` en `auth.ts`); falta la WhatsApp Business API.
-- **Mercado Pago y WhatsApp Business API:** Fase 2. La seña hoy es manual.
 - **Suscripción:** `locales.estado_suscripcion` existe (`prueba | activa | vencida | cancelada`); solo se bloquea el chat de los `cancelada`. Falta el cobro de los US$29/mes.
 - **Límite de pedidos (rate limit)** en `/api/t/*` y `/api/registro` antes de abrir al público.
 - **Reserva simultánea:** el índice único evita que dos clientes tomen el mismo horario de inicio; el solapamiento parcial lo valida el código antes de insertar. Si el volumen crece, pasar a un `EXCLUDE` por rango o a una transacción con lock por local.

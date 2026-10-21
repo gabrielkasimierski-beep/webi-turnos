@@ -30,6 +30,8 @@ export type Ficha = {
   pedirConfirmacion: boolean;
   sena: Sena;
   fidelidad: Fidelidad;
+  whatsappAuto: boolean;
+  mpConectado: boolean;
 };
 
 export type EstadoTurno = "pendiente" | "atendido" | "no_vino" | "cancelado";
