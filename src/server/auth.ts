@@ -53,22 +53,43 @@ export async function iniciarSesion(s: Sesion) {
 export async function cerrarSesion() { (await cookies()).delete(COOKIE); }
 
 /* ---------- envío del código ----------
-   Mail: Resend (RESEND_API_KEY + MAIL_FROM). Sin clave, o si Resend falla, el código queda en la consola del servidor.
+   Mail, en orden: Brevo (BREVO_API_KEY) → Resend (RESEND_API_KEY) → consola del servidor.
+   Brevo deja mandar a cualquiera verificando un solo remitente (sin dominio propio): ideal para arrancar gratis.
+   MAIL_FROM es "Nombre <mail@dominio>"; con Brevo ese mail debe ser el remitente verificado en la cuenta.
    TODO(Fase 2): canal "whatsapp" con WhatsApp Business API (hace falta plantilla aprobada).
  */
 export type Canal = "mail" | "whatsapp";
+const MAIL_DEFECTO = "WEBI Turnos <onboarding@resend.dev>";
+/** Separa "Nombre <mail@x>" en { nombre, email }. Si no tiene ángulos, todo es el email. */
+function remitente() {
+  const crudo = process.env.MAIL_FROM?.trim() || MAIL_DEFECTO;
+  const m = crudo.match(/^\s*(.*?)\s*<([^>]+)>\s*$/);
+  return m ? { nombre: m[1] || "WEBI Turnos", email: m[2].trim() } : { nombre: "WEBI Turnos", email: crudo };
+}
+function cuerpoMail(codigo: string) {
+  return {
+    asunto: `Tu código de ingreso: ${codigo}`,
+    texto: `Tu código para entrar al panel de WEBI Turnos es ${codigo}. Vence en 10 minutos.\n\nSi no lo pediste, ignorá este mail.`,
+    html: `<div style="font-family:system-ui,sans-serif;max-width:420px"><p>Tu código para entrar al panel de <b>WEBI Turnos</b> es:</p><p style="font-size:32px;font-weight:700;letter-spacing:6px;margin:16px 0">${codigo}</p><p style="color:#666">Vence en 10 minutos. Si no lo pediste, ignorá este mail.</p></div>`,
+  };
+}
 async function enviarCodigo(canal: Canal, destino: string, codigo: string) {
   if (canal === "whatsapp") { await enviarCodigoWa(destino, codigo); return; }
-  const clave = process.env.RESEND_API_KEY?.trim();
-  if (clave) {
+  const de = remitente(), { asunto, texto, html } = cuerpoMail(codigo);
+  const brevo = process.env.BREVO_API_KEY?.trim();
+  if (brevo) {
+    const r = await fetch("https://api.brevo.com/v3/smtp/email", {
+      method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json", "api-key": brevo },
+      body: JSON.stringify({ sender: { name: de.nombre, email: de.email }, to: [{ email: destino }], subject: asunto, textContent: texto, htmlContent: html }),
+    });
+    if (r.ok) return;
+    console.error("[mail] Brevo rechazó el envío:", r.status, await r.text());
+  }
+  const resend = process.env.RESEND_API_KEY?.trim();
+  if (resend) {
     const r = await fetch("https://api.resend.com/emails", {
-      method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + clave },
-      body: JSON.stringify({
-        from: process.env.MAIL_FROM?.trim() || "WEBI Turnos <onboarding@resend.dev>", to: [destino],
-        subject: `Tu código de ingreso: ${codigo}`,
-        text: `Tu código para entrar al panel de WEBI Turnos es ${codigo}. Vence en 10 minutos.\n\nSi no lo pediste, ignorá este mail.`,
-        html: `<div style="font-family:system-ui,sans-serif;max-width:420px"><p>Tu código para entrar al panel de <b>WEBI Turnos</b> es:</p><p style="font-size:32px;font-weight:700;letter-spacing:6px;margin:16px 0">${codigo}</p><p style="color:#666">Vence en 10 minutos. Si no lo pediste, ignorá este mail.</p></div>`,
-      }),
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + resend },
+      body: JSON.stringify({ from: process.env.MAIL_FROM?.trim() || MAIL_DEFECTO, to: [destino], subject: asunto, text: texto, html }),
     });
     if (r.ok) return;
     console.error("[mail] Resend rechazó el envío:", r.status, await r.text());
