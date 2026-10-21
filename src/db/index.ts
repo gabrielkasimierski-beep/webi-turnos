@@ -22,6 +22,12 @@ async function crear(): Promise<Db> {
   const cliente = new PGlite(process.env.PGLITE_DIR || ".data/pglite");
   const db = drizzle(cliente, { schema });
   await migrate(db, { migrationsFolder: "./drizzle" });
+  // en desarrollo local se precargan los locales de ejemplo para poder probar de punta a punta
+  if (process.env.SEED_LOCAL !== "0") {
+    g.__db = Promise.resolve(db as unknown as Db); // para que el seed (que usa getDb) no espere a esta misma función
+    const { sembrar } = await import("@/server/seed");
+    await sembrar();
+  }
   console.log("[db] Usando base local embebida (PGlite) en .data/ — definí DATABASE_URL para usar Neon.");
   return db as unknown as Db;
 }
