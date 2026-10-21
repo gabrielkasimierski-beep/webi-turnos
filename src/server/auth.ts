@@ -53,12 +53,26 @@ export async function iniciarSesion(s: Sesion) {
 export async function cerrarSesion() { (await cookies()).delete(COOKIE); }
 
 /* ---------- envío del código ----------
-   TODO(Fase 1.5): mandar el mail de verdad (Resend/Postmark: RESEND_API_KEY + MAIL_FROM).
+   Mail: Resend (RESEND_API_KEY + MAIL_FROM). Sin clave, o si Resend falla, el código queda en la consola del servidor.
    TODO(Fase 2): canal "whatsapp" con WhatsApp Business API (hace falta plantilla aprobada).
-   Mientras tanto el código se loguea en la consola del servidor. */
+ */
 export type Canal = "mail" | "whatsapp";
 async function enviarCodigo(canal: Canal, destino: string, codigo: string) {
   if (canal === "whatsapp") { await enviarCodigoWa(destino, codigo); return; }
+  const clave = process.env.RESEND_API_KEY?.trim();
+  if (clave) {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + clave },
+      body: JSON.stringify({
+        from: process.env.MAIL_FROM?.trim() || "WEBI Turnos <onboarding@resend.dev>", to: [destino],
+        subject: `Tu código de ingreso: ${codigo}`,
+        text: `Tu código para entrar al panel de WEBI Turnos es ${codigo}. Vence en 10 minutos.\n\nSi no lo pediste, ignorá este mail.`,
+        html: `<div style="font-family:system-ui,sans-serif;max-width:420px"><p>Tu código para entrar al panel de <b>WEBI Turnos</b> es:</p><p style="font-size:32px;font-weight:700;letter-spacing:6px;margin:16px 0">${codigo}</p><p style="color:#666">Vence en 10 minutos. Si no lo pediste, ignorá este mail.</p></div>`,
+      }),
+    });
+    if (r.ok) return;
+    console.error("[mail] Resend rechazó el envío:", r.status, await r.text());
+  }
   console.log(`
 [OTP] Código de ingreso para ${destino}: ${codigo}  (válido 10 min)
 `);
