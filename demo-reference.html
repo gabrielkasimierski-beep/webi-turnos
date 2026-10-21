@@ -1,0 +1,1136 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Asistente del Local</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: arriba, un selector de las tres caras del producto (Cliente · Local · Configurar).
+   Abajo, un marco que cambia de forma: teléfono angosto para el chat, hoja ancha para panel y ficha. */
+:root{
+  --bg:#E7E4DE;
+  --surface:#FFFFFF;
+  --surface-2:#F3F0EA;
+  --ink:#1B1915;
+  --muted:#6E6860;
+  --line:#E2DDD4;
+  --brand:#A86D21;           /* lo pisa la ficha de cada local */
+  --brand-ink:#FFFFFF;
+  --brand-text:color-mix(in srgb,var(--brand) 86%,#000);
+  --brand-soft:color-mix(in srgb,var(--brand) 13%,var(--surface));
+  --ok:#2F7D51; --warn:#B4600F; --bad:#B23A32;
+  --f-marca:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --f-texto:"Instrument Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0B0B0D; --surface:#17161A; --surface-2:#232128; --ink:#F2EFE9; --muted:#9C958A; --line:#2E2C33;
+  --brand-text:color-mix(in srgb,var(--brand) 60%,#fff);
+  --brand-soft:color-mix(in srgb,var(--brand) 20%,var(--surface));
+  --ok:#67C98D; --warn:#E9A25A; --bad:#F07F76; color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0B0B0D; --surface:#17161A; --surface-2:#232128; --ink:#F2EFE9; --muted:#9C958A; --line:#2E2C33;
+  --brand-text:color-mix(in srgb,var(--brand) 60%,#fff);
+  --brand-soft:color-mix(in srgb,var(--brand) 20%,var(--surface));
+  --ok:#67C98D; --warn:#E9A25A; --bad:#F07F76; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);font:400 1rem/1.5 var(--f-texto);-webkit-font-smoothing:antialiased;
+  display:flex;flex-direction:column;align-items:center;gap:12px;
+  padding-block:14px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.num{font-variant-numeric:tabular-nums}
+
+/* selector de caras */
+.caras{width:min(760px,100%);display:grid;gap:6px;flex:none}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:4px;gap:4px}
+.seg button{border:0;background:none;padding:9px 6px;border-radius:10px;cursor:pointer;font-weight:600;font-size:.92rem;color:var(--muted)}
+.seg button[aria-selected="true"]{background:var(--brand);color:var(--brand-ink)}
+.caras p{margin:0;text-align:center;font-size:.82rem;color:var(--muted)}
+
+/* marco */
+.marco{width:min(760px,100%);flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden;position:relative;
+  background:var(--surface);border:1px solid var(--line);border-radius:22px;box-shadow:0 26px 60px -32px rgba(0,0,0,.45)}
+.marco.chat{width:min(420px,100%)}
+.vista{flex:1;min-height:0;display:flex;flex-direction:column}
+.vista[hidden]{display:none!important}
+
+/* ---------- CHAT ---------- */
+.tope{display:flex;align-items:center;gap:13px;padding:15px 16px;border-bottom:1px solid var(--line);flex:none}
+.avatar{width:56px;height:56px;border-radius:16px;flex:none;display:grid;place-items:center;overflow:hidden;background:var(--brand);color:var(--brand-ink);font:700 1.5rem/1 var(--f-marca)}
+.avatar img{width:100%;height:100%;object-fit:cover}
+.quien{flex:1;min-width:0}
+.nom{font:800 1.5rem/1.1 var(--f-marca);letter-spacing:-.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.estado{font-size:.82rem;color:var(--muted);display:flex;align-items:center;gap:6px;margin-top:3px}
+.punto{width:7px;height:7px;border-radius:50%;background:var(--ok);flex:none}
+.cinta{font-size:.74rem;color:var(--brand-text);background:var(--brand-soft);text-align:center;padding:5px 12px;flex:none;border-bottom:1px solid var(--line)}
+.sello{flex:none;text-align:center;padding:7px 12px;padding-bottom:max(7px,env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);font-size:.72rem;color:var(--muted);text-decoration:none;background:var(--surface)}
+.sello b{font-family:var(--f-marca);color:var(--ink);font-weight:800}
+.sello b i{color:var(--brand);font-style:normal}
+.logoprev{grid-column:1/-1;display:flex;align-items:center;gap:10px}
+.logoprev img{width:54px;height:54px;border-radius:12px;object-fit:cover;border:1px solid var(--line)}
+.hilo{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:16px 14px 8px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:86%;padding:10px 13px;border-radius:16px;white-space:pre-wrap;overflow-wrap:anywhere;animation:aparece .2s ease both}
+.msg.bot{align-self:flex-start;background:var(--surface-2);border-bottom-left-radius:5px}
+.msg.yo{align-self:flex-end;background:var(--brand);color:var(--brand-ink);border-bottom-right-radius:5px}
+@keyframes aparece{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.ficha{display:grid;gap:3px;margin-top:6px;padding-top:8px;border-top:1px solid color-mix(in srgb,currentColor 18%,transparent);font-size:.92rem;white-space:normal}
+.ficha div{display:flex;gap:8px}.ficha span{opacity:.68;min-width:4.4rem}
+.dots{display:inline-flex;gap:4px;padding:3px 0}
+.dots i{width:7px;height:7px;border-radius:50%;background:var(--muted);opacity:.4;animation:late 1.1s infinite}
+.dots i:nth-child(2){animation-delay:.18s}.dots i:nth-child(3){animation-delay:.36s}
+@keyframes late{0%,60%,100%{opacity:.25;transform:none}30%{opacity:.9;transform:translateY(-3px)}}
+@media (prefers-reduced-motion:reduce){.msg,.dots i{animation:none}}
+.chips{display:flex;flex-wrap:wrap;gap:8px;padding:2px 14px 10px;flex:none;max-height:40%;overflow-y:auto}
+.chip{font-weight:500;font-size:.9rem;line-height:1;color:var(--brand-text);background:var(--surface);border:1.4px solid color-mix(in srgb,var(--brand) 45%,var(--line));
+  padding:9px 14px;border-radius:999px;cursor:pointer}
+.chip:hover{background:var(--brand-soft)}
+.chip.lleno{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+.propuesta{width:100%;background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 35%,var(--line));border-radius:14px;padding:12px 14px;display:grid;gap:10px}
+.propuesta b{font-family:var(--f-marca)}
+.propuesta .acc{display:flex;gap:8px;flex-wrap:wrap}
+.barra{display:flex;gap:9px;align-items:flex-end;padding:11px 14px;padding-bottom:max(11px,env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);flex:none}
+.barra textarea{flex:1;min-width:0;resize:none;border:1px solid var(--line);background:var(--surface-2);font-size:1rem;line-height:1.4;padding:11px 14px;border-radius:18px;max-height:96px}
+.enviar{width:46px;height:46px;flex:none;border:0;border-radius:50%;background:var(--brand);color:var(--brand-ink);font-size:1.15rem;cursor:pointer}
+.enviar:disabled{opacity:.4;cursor:default}
+.oculto{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* ---------- PANEL Y FICHA (hoja ancha) ---------- */
+.hoja{flex:1;min-height:0;overflow-y:auto;padding:18px 20px 28px;display:grid;align-content:start;gap:18px}
+.cab{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
+.cab h2{margin:0;font:700 1.35rem/1.15 var(--f-marca);letter-spacing:-.01em;text-wrap:balance}
+.sub{margin:0;color:var(--muted);font-size:.86rem}
+.modo{font-size:.78rem;color:var(--muted);display:flex;align-items:center;gap:6px}
+.modo .punto.no{background:var(--warn)}
+.dias{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.dia{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:7px 11px;cursor:pointer;display:grid;justify-items:center;gap:1px;min-width:58px}
+.dia small{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.dia b{font:700 1.05rem/1.1 var(--f-marca)}
+.dia .n{font-size:.68rem;color:var(--brand-text);min-height:1em}
+.dia[aria-pressed="true"]{border-color:var(--brand);background:var(--brand-soft)}
+.dia.alerta{border-color:color-mix(in srgb,var(--bad) 55%,var(--line))}
+.cifras{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.cifra{background:var(--surface-2);border-radius:12px;padding:10px 12px;display:grid;gap:2px;min-width:0}
+.cifra small{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.cifra b{font:700 1.25rem/1.1 var(--f-marca);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+@media (max-width:560px){.cifras{grid-template-columns:repeat(2,1fr)}}
+.medios{font-size:.8rem;color:var(--muted);margin-top:-8px}
+.lista{display:grid;gap:8px}
+.vacio{border:1px dashed var(--line);border-radius:14px;padding:22px;text-align:center;color:var(--muted);font-size:.92rem}
+.turno{border:1px solid var(--line);border-radius:14px;padding:11px 13px;display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:center}
+.turno .hora{font:700 1.1rem/1 var(--f-marca);font-variant-numeric:tabular-nums}
+.turno .info{min-width:0}
+.turno .info b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.turno .info span{font-size:.84rem;color:var(--muted)}
+.turno .acc{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;padding-top:6px}
+.turno.apagado{opacity:.55}
+.pill{font-size:.72rem;font-weight:600;padding:4px 9px;border-radius:999px;white-space:nowrap;background:var(--surface-2);color:var(--muted)}
+.pill.pendiente{background:var(--brand-soft);color:var(--brand-text)}
+.pill.atendido{background:color-mix(in srgb,var(--ok) 16%,var(--surface));color:var(--ok)}
+.pill.sin{background:color-mix(in srgb,var(--bad) 14%,var(--surface));color:var(--bad)}
+.pill.no_vino,.pill.cancelado{color:var(--muted)}
+.pill.warn{background:color-mix(in srgb,var(--warn) 16%,var(--surface));color:var(--warn)}
+.turno .marcas{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px}
+.origen{font-size:.7rem;color:var(--muted);margin-left:6px}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:7px 11px;cursor:pointer;font-size:.86rem;font-weight:500}
+.btn:hover{background:var(--surface-2)}
+.btn.pri{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
+.btn.ok{border-color:color-mix(in srgb,var(--ok) 50%,var(--line));color:var(--ok)}
+.btn.peligro{color:var(--bad)}
+a.btn{text-decoration:none;display:inline-block}
+.caja{border:1px solid var(--line);border-radius:16px;padding:14px;display:grid;gap:12px;background:var(--surface-2)}
+.caja h3,.bloque h3{margin:0;font:700 1rem/1.2 var(--f-marca)}
+.campos{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+label.c{display:grid;gap:4px;font-size:.8rem;color:var(--muted);min-width:0}
+label.c input,label.c select,label.c textarea,.fila input,.fila select,.buscar input{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 10px;font-size:.95rem;color:var(--ink);min-width:0;width:100%}
+.check{display:flex;align-items:center;gap:8px;font-size:.92rem}
+.acciones{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.nota{font-size:.84rem;color:var(--muted)}
+.nota.ok{color:var(--ok)}.nota.mal{color:var(--bad)}
+
+.bloque{display:grid;gap:10px;padding-top:16px;border-top:1px solid var(--line)}
+.bloque:first-of-type{border-top:0;padding-top:0}
+.bloque p.sub{margin-top:-4px}
+.fila{display:grid;gap:8px;align-items:center}
+.fila.srv{grid-template-columns:minmax(0,1fr) 7rem 6rem 2.4rem}
+.fila.faq{grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 2.4rem}
+.fila.rec{grid-template-columns:minmax(0,1fr) 2.4rem}
+.fila.hor{grid-template-columns:7.5rem 1fr 1fr}
+.fila.srv .alias{grid-column:1/-1;font-size:.86rem;background:var(--surface-2)}
+.fila.srv+.fila.srv{padding-top:6px;border-top:1px dashed var(--line)}
+.fila.hor input[type=checkbox]{width:auto}
+.encab{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.quitar{border:1px solid var(--line);background:var(--surface);border-radius:10px;height:2.4rem;cursor:pointer;color:var(--muted)}
+@media (max-width:560px){
+  .fila.srv{grid-template-columns:minmax(0,1fr) 5.6rem 2.4rem}
+  .fila.srv .dur{grid-column:1/2}
+  .fila.faq{grid-template-columns:minmax(0,1fr) 2.4rem}
+  .fila.faq .r{grid-column:1/2}
+  .fila.hor{grid-template-columns:6.5rem 1fr 1fr}
+  .encab.desk{display:none}
+}
+.rubros{display:flex;flex-wrap:wrap;gap:8px}
+.rubro{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:8px 13px;cursor:pointer;font-size:.9rem}
+.rubro[aria-pressed="true"]{border-color:var(--brand);background:var(--brand-soft);color:var(--brand-text);font-weight:600}
+.pie-guardar{position:sticky;bottom:0;margin:0 -20px -28px;padding:12px 20px;padding-bottom:max(12px,env(safe-area-inset-bottom,0px));background:var(--surface);border-top:1px solid var(--line);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+</style>
+
+<div class="caras">
+  <div class="seg" role="tablist" aria-label="Versiones del producto">
+    <button role="tab" id="tab-cliente" aria-selected="true" data-cara="cliente">Cliente</button>
+    <button role="tab" id="tab-local" aria-selected="false" data-cara="local">Local</button>
+    <button role="tab" id="tab-configurar" aria-selected="false" data-cara="configurar">Configurar</button>
+  </div>
+  <p id="leyenda">Lo que ve quien escanea el QR: pregunta y saca turno solo.</p>
+</div>
+
+<div class="marco chat" id="marco">
+  <!-- CLIENTE -->
+  <section class="vista" id="v-cliente">
+    <div class="tope">
+      <div class="avatar" id="avatar">B</div>
+      <div class="quien">
+        <div class="nom" id="nomChat">…</div>
+        <div class="estado"><span class="punto"></span><span id="estadoChat">Asistente · responde al instante</span></div>
+      </div>
+    </div>
+    <div class="cinta" id="cintaChat">Demostración</div>
+    <div class="hilo" id="hilo" role="log" aria-live="polite" aria-label="Conversación"></div>
+    <div class="chips" id="chips"></div>
+    <form class="barra" id="barra">
+      <label for="texto" class="oculto">Escribí tu mensaje</label>
+      <textarea id="texto" rows="1" placeholder="Escribí tu consulta…" autocomplete="off"></textarea>
+      <button class="enviar" id="enviar" type="submit" aria-label="Enviar" disabled>&#8593;</button>
+    </form>
+    <a class="sello" href="https://web-ia-ruddy.vercel.app/" target="_blank" rel="noopener" aria-label="Con tecnología WEBI">con tecnología <b>w<i>&rsquo;</i>ebi</b></a>
+  </section>
+
+  <!-- LOCAL -->
+  <section class="vista" id="v-local" hidden>
+    <div class="hoja" id="hojaLocal"></div>
+  </section>
+
+  <!-- CONFIGURAR -->
+  <section class="vista" id="v-configurar" hidden>
+    <div class="hoja" id="hojaConfig"></div>
+  </section>
+</div>
+
+<script>
+/* =====================================================================
+   RUBROS · fichas de ejemplo. Son negocios ficticios para la demo.
+   ===================================================================== */
+const semana = (abre,cierra,dias)=>{const h={};for(let i=0;i<7;i++)h[i]=dias.includes(i)?{abre,cierra}:null;return h;};
+const RUBROS = {
+  barberia:{rubro:"Barbería",nombre:"Barbería El Faro",color:"#A86D21",palabra:"turno",recurso:"barbero",
+    recursos:["Nico","Ale","Fran"],servicios:[["Corte",7000,30,"cortar, cortarme, pelo, rapado, degradé, fade"],["Corte + barba",10000,45,"corte y barba, completo, pelo y barba"],["Perfilado de barba",4500,20,"barba, afeitar, afeitado, perfilar"],["Color / platinado",16000,90,"tintura, teñir, platinado, decoloración, mechas, color"]],
+    horarios:semana("10:00","20:00",[1,2,3,4,5,6]),
+    faqs:[["¿Aceptan tarjeta o Mercado Pago?","Sí: efectivo, tarjeta, transferencia o Mercado Pago."],["¿Cortan a nenes?","Sí, el corte infantil sale igual que el corte común."]]},
+  estetica:{rubro:"Peluquería y estética",nombre:"Estudio Lumi",color:"#B04F78",palabra:"turno",recurso:"profesional",
+    recursos:["Caro","Meli"],servicios:[["Corte y brushing",12000,60,"corte, cortarme, brushing, peinado"],["Color",28000,120,"tintura, teñir, mechas, reflejos, raíz"],["Alisado",45000,150,"keratina, botox, alisar"],["Limpieza facial",18000,60,"facial, cutis, limpieza"]],
+    horarios:semana("09:00","19:00",[2,3,4,5,6]),
+    faqs:[["¿Tengo que llevar algo?","No hace falta, tenemos todos los productos."],["¿Cuánto tarda el color?","Entre 2 y 3 horas, según el largo del pelo."]]},
+  unas:{rubro:"Uñas y pestañas",nombre:"Nail Bar Flor",color:"#9B4DCA",palabra:"turno",recurso:"manicura",
+    recursos:["Flor","Juli"],servicios:[["Semipermanente",9000,60,"semi, esmaltado, uñas"],["Kapping",13000,90,"kaping, capping"],["Esculpidas",18000,120,"acrílicas, gel, esculpir"],["Lifting de pestañas",15000,60,"pestañas, lifting"]],
+    horarios:semana("10:00","20:00",[1,2,3,4,5,6]),
+    faqs:[["¿Cuánto dura el semipermanente?","Entre 2 y 3 semanas, según el cuidado."],["¿Hacen retiro de otro lugar?","Sí, el retiro se cobra aparte: $3.000."]]},
+  consultorio:{rubro:"Consultorio",nombre:"Kinesio Norte",color:"#2F7A8C",palabra:"turno",recurso:"profesional",
+    recursos:["Lic. Paz","Lic. Romero"],servicios:[["Sesión de kinesiología",15000,40,"sesión, kinesio, kine, rehabilitación"],["Primera consulta",20000,60,"primera vez, evaluación, consulta"],["Masaje descontracturante",17000,50,"masaje, masajes, contractura"]],
+    horarios:semana("08:00","20:00",[1,2,3,4,5]),
+    faqs:[["¿Atienden por obra social?","Por ahora atendemos en forma particular y te damos factura para el reintegro."],["¿Necesito orden médica?","Para la primera consulta no. Si tenés estudios, traelos."]]},
+  cancha:{rubro:"Canchas de pádel",nombre:"Pádel Club Sur",color:"#2F8A4A",palabra:"reserva",recurso:"cancha",
+    recursos:["Cancha 1","Cancha 2","Cancha 3"],servicios:[["Turno de 60 min",24000,60,"una hora, 1 hora, 60 minutos"],["Turno de 90 min",34000,90,"hora y media, 90 minutos"]],
+    horarios:semana("08:00","23:00",[0,1,2,3,4,5,6]),
+    faqs:[["¿Alquilan paletas?","Sí, a $2.000 cada una."],["¿Hay vestuarios?","Sí, con duchas."]]},
+  taller:{rubro:"Taller mecánico",nombre:"Taller Rivas",color:"#C0581E",palabra:"turno",recurso:"box",
+    recursos:["Box 1","Box 2"],servicios:[["Cambio de aceite y filtro",45000,60,"aceite, filtro"],["Service completo",120000,180,"service, mantenimiento"],["Alineación y balanceo",35000,60,"alinear, alineación, balancear, balanceo, tren delantero"],["Diagnóstico",15000,30,"revisar, revisión, ruido, falla, scanner"]],
+    horarios:semana("08:00","17:00",[1,2,3,4,5]),
+    faqs:[["¿Puedo esperar mientras lo arreglan?","Sí, hay sala de espera con wifi."],["¿Dan auto de cortesía?","No tenemos auto de cortesía."]]},
+  resto:{rubro:"Restaurante",nombre:"Bodegón Doña Rosa",color:"#9C3B2E",palabra:"reserva",recurso:"mesa",
+    recursos:["Mesa 1","Mesa 2","Mesa 3","Mesa 4","Mesa 5"],servicios:[["Mesa para 2",0,90,"2 personas, dos personas, pareja, somos 2, somos dos"],["Mesa para 4",0,90,"4 personas, cuatro personas, somos 4, somos cuatro"],["Mesa para 6",0,120,"6 personas, seis personas, somos 6, somos seis"]],
+    horarios:semana("20:00","23:59",[0,2,3,4,5,6]),
+    faqs:[["¿Tienen platos sin TACC?","Tenemos algunos platos sin TACC. Avisanos al reservar."],["¿Se puede ir con mascota?","Sí, en las mesas de la vereda."]]},
+};
+const slug = s => (s||"x").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,40)||"x";
+function unicos(nombres){const vistos={};return nombres.map(n=>{let id=slug(n),k=id,i=2;while(vistos[k])k=id+"-"+(i++);vistos[k]=1;return k;});}
+/* seña de ejemplo por rubro: solo canchas y restaurantes la piden */
+const SENAS = {
+  cancha:{activa:true,obligatoria:true,tipo:"fijo",monto:5000,alias:"padelclubsur.mp",nota:"Se descuenta del total al jugar."},
+  resto:{activa:true,obligatoria:false,tipo:"fijo",monto:3000,alias:"donarosa.mp",nota:"Por persona, se descuenta del consumo."},
+};
+function armarFicha(clave){
+  const r = RUBROS[clave];
+  const rid = unicos(r.recursos), sid = unicos(r.servicios.map(s=>s[0]));
+  return {
+    rubroClave:clave, rubro:r.rubro, nombre:r.nombre, color:r.color, palabra:r.palabra, recurso:r.recurso,
+    direccion:"Dirección de ejemplo 123", whatsapp:"", instagram:"", logo:"",
+    recursos:r.recursos.map((n,i)=>({id:rid[i],nombre:n})),
+    servicios:r.servicios.map((s,i)=>({id:sid[i],nombre:s[0],precio:s[1],duracion:s[2],alias:s[3]||""})),
+    horarios:JSON.parse(JSON.stringify(r.horarios)),
+    faqs:r.faqs.map(f=>({p:f[0],r:f[1]})),
+    intervalo:30, anticipacion:14, ejemplo:true,
+    recordatorioHoras:24, pedirConfirmacion:true,
+    sena:SENAS[clave]?{...SENAS[clave]}:{activa:false,obligatoria:false,tipo:"fijo",monto:0,alias:"",nota:""},
+  };
+}
+
+/* =====================================================================
+   ESTADO Y GUARDADO · base compartida si la página la tiene,
+   si no, el navegador (solo este dispositivo).
+   ===================================================================== */
+const S = { ficha:armarFicha("barberia"), turnos:[], db:null, compartido:false, cara:"cliente", diaPanel:null, abierto:null, agregando:false, borrador:null };
+const TAB = Math.random().toString(36).slice(2);
+const LS = { get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch{return d;}}, set(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}} };
+
+async function iniciarDatos(){
+  const local = LS.get("al-ficha",null); if(local) S.ficha = local;
+  S.turnos = LS.get("al-turnos",[]);
+  pintarTodo();
+  const use = window.claude?.use;
+  if(!use) return;
+  const db = await claude.use("db");
+  if(!db) return;
+  S.db = db; S.compartido = true;
+  db.doc("local/ficha").onSnapshot(s=>{
+    if(s.exists){ S.ficha = s.data(); }
+    pintarTodo(true);
+  }, ()=>{});
+  db.collection("turnos").onSnapshot(q=>{
+    S.turnos = q.docs.map(d=>({...d.data(), id:d.id}));
+    if(S.cara==="local") pintarLocal();
+  }, ()=>{});
+}
+async function guardarTurno(t){
+  if(S.db){ await S.db.collection("turnos").doc(t.id).set(limpio(t)); }
+  else { S.turnos = S.turnos.filter(x=>x.id!==t.id).concat([t]); LS.set("al-turnos",S.turnos); if(S.cara==="local") pintarLocal(); }
+}
+async function cambiarTurno(id,cambios){
+  if(S.db){ await S.db.collection("turnos").doc(id).update(cambios); }
+  else { const t=S.turnos.find(x=>x.id===id); Object.assign(t,cambios); LS.set("al-turnos",S.turnos); pintarLocal(); }
+}
+async function guardarFicha(f){
+  if(S.db){ await S.db.doc("local/ficha").set(limpio(f)); }
+  else { S.ficha=f; LS.set("al-ficha",f); pintarTodo(true); }
+}
+const limpio = o => JSON.parse(JSON.stringify(o));
+
+/* =====================================================================
+   FECHAS, HORARIOS Y DISPONIBILIDAD · la regla vive acá, no en la IA
+   ===================================================================== */
+const pad = n=>String(n).padStart(2,"0");
+const aMin = s=>{const [h,m]=String(s).split(":").map(Number);return h*60+(m||0);};
+const aHora = m=>pad(Math.floor(m/60))+":"+pad(m%60);
+const iso = d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const desdeIso = s=>{const [y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d);};
+const DIAS = ["dom","lun","mar","mié","jue","vie","sáb"];
+const DIAS_L = ["Domingo","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado"];
+const hoyIso = ()=>iso(new Date());
+function etiquetaDia(f){ const d=desdeIso(f), h=hoyIso(), m=iso(new Date(Date.now()+864e5));
+  return (f===h?"Hoy":f===m?"Mañana":DIAS[d.getDay()])+" "+d.getDate()+"/"+(d.getMonth()+1); }
+const plata = n=>"$"+Number(n||0).toLocaleString("es-AR");
+const precioTxt = s=> s.precio>0 ? plata(s.precio) : "sin cargo";
+const norm = t=>(t||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").trim();
+const esc = t=>{const d=document.createElement("div");d.textContent=t==null?"":String(t);return d.innerHTML;};
+const escA = t=>esc(t).replace(/"/g,"&quot;").replace(/'/g,"&#39;"); // para atributos HTML
+const dig = s=>String(s||"").replace(/\D/g,"");
+/* mismo celular: dígitos iguales, o los últimos 8 (por el 0, el 15 o el 549 delante) */
+const mismoTel = (a,b)=>{a=dig(a);b=dig(b);return a.length>=8&&b.length>=8&&(a===b||a.slice(-8)===b.slice(-8));};
+/* la seña de la ficha, con defaults por si la ficha es vieja */
+const senaDe = f=>Object.assign({activa:false,obligatoria:false,tipo:"fijo",monto:0,alias:"",nota:""},(f&&f.sena)||{});
+/* cuánto sale la seña de ESTE servicio: monto fijo, o porcentaje del precio (redondeado a $100) */
+function senaMonto(srv){ const s=senaDe(S.ficha); if(!s.activa) return 0;
+  const m = s.tipo==="porcentaje" ? Math.round((Number(srv&&srv.precio)||0)*(Number(s.monto)||0)/100/100)*100 : Number(s.monto)||0;
+  return Math.max(0,Math.round(m)); }
+const pideSena = srv=>senaMonto(srv)>0;
+const senaObligatoria = ()=>!!senaDe(S.ficha).obligatoria;
+
+function diasAbiertos(){
+  const f=S.ficha, out=[], base=new Date(); base.setHours(0,0,0,0);
+  for(let i=0;i<=(f.anticipacion||14);i++){ const d=new Date(base); d.setDate(base.getDate()+i); if(f.horarios[d.getDay()]) out.push(iso(d)); }
+  return out;
+}
+function ocupado(recursoId,fecha,ini,dur,excluir){
+  return S.turnos.some(t=>t.id!==excluir && t.recursoId===recursoId && t.fecha===fecha && t.estado!=="cancelado" &&
+    aMin(t.hora) < ini+dur && ini < aMin(t.hora)+(t.dur||30));
+}
+function libres(fecha,servicio,recursoId){
+  const f=S.ficha, h=f.horarios[desdeIso(fecha).getDay()];
+  if(!h||!servicio) return [];
+  const ini=aMin(h.abre), fin=aMin(h.cierra), dur=Number(servicio.duracion)||30, paso=Number(f.intervalo)||30;
+  const ahora=new Date(), esHoy=fecha===hoyIso(), yaMin=ahora.getHours()*60+ahora.getMinutes()+15;
+  const recs = recursoId ? [recursoId] : f.recursos.map(r=>r.id);
+  const out=[];
+  for(let m=ini;m+dur<=fin;m+=paso){
+    if(esHoy && m<=yaMin) continue;
+    const r = recs.find(x=>!ocupado(x,fecha,m,dur));
+    if(r) out.push({hora:aHora(m),recursoId:r});
+  }
+  return out;
+}
+/* valida todo y anota. Si dos tocan el mismo hueco a la vez, gana el primero. */
+async function reservar(p){
+  const f=S.ficha, srv=f.servicios.find(s=>s.id===p.servicioId);
+  if(!srv) return {ok:false,motivo:"Ese servicio no existe."};
+  if(!diasAbiertos().includes(p.fecha)) return {ok:false,motivo:"Ese día no se puede reservar."};
+  const hueco = libres(p.fecha,srv,p.recursoId||null).find(x=>x.hora===p.hora);
+  if(!hueco) return {ok:false,motivo:"Ese horario ya no está libre."};
+  const rec=f.recursos.find(r=>r.id===hueco.recursoId);
+  const t={ id:p.fecha+"_"+hueco.recursoId+"_"+p.hora.replace(":",""), fecha:p.fecha, hora:p.hora, dur:Number(srv.duracion),
+    servicioId:srv.id, servicioNombre:srv.nombre, precio:Number(srv.precio)||0, recursoId:rec.id, recursoNombre:rec.nombre,
+    nombre:p.nombre||"", tel:p.tel||"", estado:"pendiente", pago:null, origen:p.origen||"chat", creado:new Date().toISOString(),
+    confirmado:false, recordado:false, sena:pideSena(srv)?{monto:senaMonto(srv),estado:"pendiente"}:{monto:0,estado:"no"} };
+  try{
+    if(S.db){
+      const ref=S.db.collection("turnos").doc(t.id);
+      const l=await ref.acquire({holder:TAB,ttlMs:5000});
+      if(!l.acquired) return {ok:false,motivo:"Alguien está tomando ese horario justo ahora."};
+      const s=await ref.get();
+      if(s.exists && s.data().estado!=="cancelado") return {ok:false,motivo:"Ese horario se acaba de ocupar."};
+    }
+    await guardarTurno(t);
+    return {ok:true,t};
+  }catch(e){ return {ok:false,motivo:"No se pudo guardar el turno. Probá de nuevo en un momento."}; }
+}
+
+/* =====================================================================
+   CARA 1 · CLIENTE (chat)
+   ===================================================================== */
+const hilo=document.getElementById("hilo"), chipsBox=document.getElementById("chips"), barra=document.getElementById("barra"),
+      caja=document.getElementById("texto"), btnEnviar=document.getElementById("enviar");
+let flujo=null, conv=[], ocupadoIA=false;
+
+function burbuja(quien,html){ const d=document.createElement("div"); d.className="msg "+quien; d.innerHTML=html; hilo.appendChild(d); hilo.scrollTop=hilo.scrollHeight; return d; }
+const DOTS='<span class="dots" aria-label="Escribiendo"><i></i><i></i><i></i></span>';
+function bot(partes){
+  const lista=Array.isArray(partes)?partes:[partes];
+  chips([]);
+  const b=burbuja("bot",DOTS);
+  setTimeout(()=>{ b.remove(); lista.forEach(p=>{ if(typeof p==="string") burbuja("bot",p); else if(p.chips) chips(p.chips); else if(p.html) burbuja("bot",p.html); }); }, 380+lista.length*90);
+}
+function chips(items){
+  chipsBox.innerHTML="";
+  items.forEach(it=>{ const b=document.createElement("button"); b.type="button"; b.className="chip"+(it.lleno?" lleno":""); b.textContent=it.texto;
+    b.addEventListener("click",()=>{ if(it.eco!==false) burbuja("yo",esc(it.texto)); chipsBox.innerHTML=""; it.hacer(); }); chipsBox.appendChild(b); });
+  hilo.scrollTop=hilo.scrollHeight;
+}
+function contactoChips(){
+  const f=S.ficha, out=[];
+  if(f.whatsapp) out.push({texto:"Escribir por WhatsApp",eco:false,hacer:()=>{ burbuja("bot",'Tocá acá: <a href="https://wa.me/'+esc(f.whatsapp.replace(/\D/g,""))+'" target="_blank" rel="noopener">WhatsApp del local</a>'); menuChips(); }});
+  if(f.instagram) out.push({texto:"Ir a Instagram",eco:false,hacer:()=>{ burbuja("bot",'Tocá acá: <a href="https://instagram.com/'+esc(f.instagram.replace("@",""))+'" target="_blank" rel="noopener">'+esc(f.instagram)+'</a>'); menuChips(); }});
+  return out;
+}
+const palabra=()=>S.ficha.palabra||"turno";
+function menuChips(){ chips([
+  {texto:"Sacar "+(palabra()==="reserva"?"una reserva":"un turno"),hacer:iniciarTurno},
+  {texto:"Precios",hacer:()=>responderInfo("precio")},
+  {texto:"Horarios",hacer:()=>responderInfo("horario")},
+  {texto:"Dónde están",hacer:()=>responderInfo("donde")},
+  {texto:"Cancelar o cambiar mi "+palabra(),hacer:()=>iniciarGestion("cancelar")},
+].concat(S.ficha.pedirConfirmacion===false?[]:[{texto:"Confirmar mi "+palabra(),hacer:()=>iniciarGestion("confirmar")}])); }
+function listaPrecios(){ return "<div class='ficha'>"+S.ficha.servicios.map(s=>"<div><span class='num'>"+precioTxt(s)+"</span>"+esc(s.nombre)+" · "+s.duracion+" min</div>").join("")+"</div>"; }
+function resumenHorarios(){
+  const h=S.ficha.horarios, partes=[];
+  for(const i of [1,2,3,4,5,6,0]) partes.push(DIAS_L[i]+": "+(h[i]?h[i].abre+" a "+h[i].cierra:"cerrado"));
+  return partes.join("\n");
+}
+function saludo(){
+  hilo.innerHTML=""; flujo=null; conv=[];
+  bot(["¡Hola! 👋 Soy el asistente de <b>"+esc(S.ficha.nombre)+"</b>. Te cuento precios y horarios, o te anoto "+(palabra()==="reserva"?"una reserva":"un turno")+" al toque.",{chips:[]}]);
+  setTimeout(menuChips,700);
+}
+
+/* --- el intérprete: entiende lo que escriben sin depender de nada externo --- */
+const STOP=new Set("que como cual cuales donde cuando cuanto cuanta cuantos para por con los las del una uno unos unas tienen tiene tenes tengo hay hacen hacer puedo puede algo esta estan otro otra mas muy bien quiero queria quisiera necesito".split(" "));
+const palabras=t=>norm(t).replace(/[^a-z0-9ñ ]+/g," ").split(/\s+/).filter(Boolean);
+const sig=w=>(w.length>=3||/^\d+$/.test(w))&&!STOP.has(w);
+function casi(a,b){ // distancia de edición <= 1 (para errores de tipeo)
+  if(a===b) return true; const la=a.length, lb=b.length; if(Math.abs(la-lb)>1) return false;
+  let i=0,j=0,ed=0; while(i<la&&j<lb){ if(a[i]===b[j]){i++;j++;continue;} if(++ed>1) return false; if(la>lb)i++; else if(lb>la)j++; else{i++;j++;} }
+  return ed+(la-i)+(lb-j)<=1;
+}
+function igual(w,c){
+  if(w===c) return true; if(/\d/.test(w)||/\d/.test(c)) return false;
+  if(c.length>=5&&w.length>=4&&casi(w,c)) return true;
+  const [s,l]=w.length<c.length?[w,c]:[c,w]; return s.length>=5&&l.startsWith(s);
+}
+/* cuántas palabras de "frase" aparecen todas en el mensaje (0 si falta alguna) */
+function calza(toks,frase){ const fs=palabras(frase).filter(sig); if(!fs.length) return 0; return fs.every(x=>toks.some(w=>igual(w,x)))?fs.length:0; }
+const DIA_NOM={domingo:0,lunes:1,martes:2,miercoles:3,jueves:4,viernes:5,sabado:6};
+const NUM_PAL={una:1,uno:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,diez:10,once:11,doce:12};
+
+function entender(raw){
+  const f=S.ficha, toks=palabras(raw), t=" "+toks.join(" ")+" ", e={info:null};
+  const hay=(...ks)=>ks.some(k=>t.includes(k));
+  // servicio: el nombre o cualquiera de sus "también le dicen"
+  let mejor=0;
+  f.servicios.forEach(s=>[s.nombre].concat(String(s.alias||"").split(",")).forEach(c=>{ if(!c.trim()) return; const n=calza(toks,c); if(n>mejor){mejor=n;e.servicioId=s.id;} }));
+  // persona o lugar
+  if(hay(" me da igual "," cualquiera "," quien sea "," el que haya "," la que haya "," el que este "," indistinto "," da igual ")) e.recursoId=null;
+  else { let m=0; f.recursos.forEach(r=>{ const n=calza(toks,r.nombre); if(n>m){m=n;e.recursoId=r.id;} }); }
+  // franja del día
+  if(/ (a|por|de) la manana /.test(t)||hay(" temprano ")) e.franja=[0,13*60,"a la mañana"];
+  else if(hay(" mediodia ")) e.franja=[11*60+30,15*60,"al mediodía"];
+  else if(/ (a|por|de|esta) la tarde /.test(t)||hay(" esta tarde "," tardecita ")) e.franja=[13*60,20*60+30,"a la tarde"];
+  else if(/ (a|por|de) la noche /.test(t)||hay(" esta noche ")) e.franja=[19*60,24*60,"a la noche"];
+  // día
+  const hoy=new Date(); hoy.setHours(0,0,0,0);
+  const mas=n=>{const d=new Date(hoy);d.setDate(d.getDate()+n);return iso(d);};
+  const sinFranja=t.replace(/ (a|por|de) la manana /g," ");
+  let m;
+  if(/ pasado manana /.test(sinFranja)) e.fecha=mas(2);
+  else if(/ manana /.test(sinFranja)) e.fecha=mas(1);
+  else if(/ hoy /.test(t)) e.fecha=mas(0);
+  else if(m=norm(raw).match(/\b(\d{1,2})[\/-](\d{1,2})\b/)){ let d=new Date(hoy.getFullYear(),+m[2]-1,+m[1]); if(d<hoy) d.setFullYear(d.getFullYear()+1); e.fecha=iso(d); }
+  else { for(const [n,i] of Object.entries(DIA_NOM)){ if(toks.some(w=>igual(w,n))){ let off=(i-hoy.getDay()+7)%7; if(off===0&&hay(" proximo "," que viene ")) off=7; e.fecha=mas(off); break; } } }
+  if(!e.fecha&&(m=t.match(/ el (\d{1,2}) (?!hs |h |horas |y )/))){ const n=+m[1]; if(n>=1&&n<=31){ let d=new Date(hoy.getFullYear(),hoy.getMonth(),n); if(d<hoy) d.setMonth(d.getMonth()+1); e.fecha=iso(d); } }
+  // hora
+  let h=null, mi=0, tipo="exacta";
+  if(m=norm(raw).match(/\b(\d{1,2})[:.](\d{2})\b/)){ h=+m[1]; mi=+m[2]; }
+  else if(m=t.match(/ (a las|las|tipo|a eso de las|despues de las|desde las|antes de las|hasta las) (\d{1,2}|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)( y media| y cuarto| y treinta| y quince)? /)){
+    h=NUM_PAL[m[2]]||+m[2]; if(m[3]) mi=/media|treinta/.test(m[3])?30:15;
+    if(/despues|desde/.test(m[1])) tipo="desde"; if(/antes|hasta/.test(m[1])) tipo="hasta"; }
+  else if(m=t.match(/ (\d{1,2}) y (media|cuarto) /)){ h=+m[1]; mi=m[2]==="media"?30:15; }
+  else if(m=t.match(/ (\d{1,2}) ?(hs|h|horas) /)) h=+m[1];
+  if(h!=null&&h<24){
+    if(h<12&&/ de la (tarde|noche) /.test(t)) h+=12;
+    else if(h>=1&&h<=11&&!/ de la manana /.test(t)){
+      const dd=e.fecha?desdeIso(e.fecha).getDay():null;
+      const rangos=dd!=null&&f.horarios[dd]?[f.horarios[dd]]:Object.values(f.horarios).filter(Boolean);
+      const dentro=x=>rangos.some(r=>x>=aMin(r.abre)&&x<aMin(r.cierra));
+      if((e.franja&&e.franja[0]>=13*60)||(!dentro(h*60+mi)&&dentro((h+12)*60+mi))) h+=12;
+    }
+    const min=h*60+mi;
+    if(tipo==="desde") e.franja=[min,24*60,"desde las "+aHora(min)]; else if(tipo==="hasta") e.franja=[0,min,"antes de las "+aHora(min)]; else e.hora=aHora(min);
+  }
+  // nombre y celular
+  if(m=raw.match(/(?:me llamo|mi nombre es|a nombre de|soy)\s+([A-Za-zÁÉÍÓÚÑáéíóúñü]{2,}(?:\s+[A-Za-zÁÉÍÓÚÑáéíóúñü]{2,})?)/i)){
+    const n=m[1].trim(); if(!/^(de|el|la|un|una|nuevo|nueva|cliente)\b/i.test(n)) e.nombre=cap(n.split(/\s+/).map(cap).join(" ")); }
+  if(m=raw.match(/\+?\d[\d\s-]{6,}\d/)){ if(m[0].replace(/\D/g,"").length>=8) e.tel=m[0].trim(); }
+  // qué quiere
+  e.cancelarTurno=hay(" cancelar mi "," cancelar el turno "," cancelar la reserva "," no voy a poder "," no voy a ir "," no puedo ir "," cambiar mi turno "," cambiar el turno "," cambiar mi reserva "," cambiar la reserva ");
+  e.confirmar=!e.cancelarTurno&&!hay(" no ")&&hay(" confirmo "," confirmar mi "," confirmar el turno "," confirmar la reserva "," confirmar asistencia "," si voy "," voy a ir "," ahi voy "," ahi estare "," alla estare ");
+  e.cancelar=!e.cancelarTurno&&/^ (cancelar|cancela|cancelalo|dejalo|olvidalo|no gracias|nada) $/.test(t);
+  e.turno=hay(" turno"," reserv"," agend"," cita "," sacar"," sacame"," anotame"," anotar"," lugar "," disponib"," tenes algo "," tienen algo "," hay algo "," hueco "," puedo ir "," me atienden "," voy ");
+  e.ganas=hay(" quiero "," queria "," quisiera "," me gustaria "," necesito "," quiero hacerme "," vengo a ");
+  if(hay(" precio"," cuanto sale"," cuanto cuesta"," cuanto esta"," sale "," cuesta "," vale "," valor "," tarifa"," cobran "," cuanto es ")) e.info="precio";
+  else if(hay(" horario"," abren"," cierran"," abierto"," atienden "," que dias "," hasta que hora ")) e.info="horario";
+  else if(hay(" donde "," direccion"," ubicacion"," como llego"," quedan "," estan ubicados ")) e.info="donde";
+  else if(hay(" servicios "," que hacen "," que ofrecen "," que tienen ")) e.info="servicios";
+  else if(hay(" hablar con "," una persona "," whatsapp "," telefono "," instagram "," el dueno "," la duena ")) e.info="contacto";
+  else if(hay(" gracias "," genial "," perfecto "," barbaro "," buenisimo ")) e.info="gracias";
+  else if(hay(" hola "," buenas "," buen dia "," que tal ")) e.info="hola";
+  // preguntas frecuentes del local
+  let fm=0; f.faqs.forEach(q=>{ const cl=palabras(q.p).filter(w=>sig(w)&&w.length>=4); const n=cl.filter(c=>toks.some(w=>w===c||(Math.min(w.length,c.length)>=5&&(w.startsWith(c)||c.startsWith(w))))).length; if(n>fm){fm=n;e.faq=q.r;} });
+  return e;
+}
+
+/* --- respuestas de información --- */
+function infoServicio(id){ const s=S.ficha.servicios.find(x=>x.id===id); return esc(s.nombre)+": <b>"+precioTxt(s)+"</b> · "+s.duracion+" min"; }
+function responderInfo(tipo,e,despues){
+  const f=S.ficha, sigue=despues||(()=>setTimeout(menuChips,650));
+  if(tipo==="precio"&&e&&e.servicioId){ bot([infoServicio(e.servicioId)]); return setTimeout(()=>chips([{texto:"Sacar "+palabra(),hacer:()=>{flujo={servicioId:e.servicioId};avanzar();}},{texto:"Ver todos los precios",hacer:()=>responderInfo("precio")}]),650); }
+  if(tipo==="precio"||tipo==="servicios"){ bot([tipo==="precio"?"Estos son los precios:":"Esto es lo que hacemos:",{html:listaPrecios()}]); return sigue(); }
+  if(tipo==="horario"){ bot([esc(resumenHorarios())]); return sigue(); }
+  if(tipo==="donde"){ bot(["📍 "+esc(f.direccion)]); return sigue(); }
+  if(tipo==="contacto"){ const c=contactoChips(); bot([c.length?"Te paso con el local:":"Consultalo directo con el local, en el mostrador o por sus redes."]); return setTimeout(()=>chips(c.concat([{texto:"Sacar "+palabra(),hacer:iniciarTurno}])),650); }
+  if(tipo==="gracias"){ bot(["¡De nada! Cualquier cosa, acá estoy."]); return sigue(); }
+  if(tipo==="hola"){ bot(["¡Hola! ¿En qué te doy una mano?"]); return sigue(); }
+}
+function sinDato(){
+  const c=contactoChips();
+  bot(["De eso no tengo el dato, y prefiero no pasarte algo equivocado. "+(c.length?"Te paso con el local:":"Consultalo directo con el local.")+"\n\nSi querés "+palabra()+", escribime algo como “el viernes a las 5”."]);
+  setTimeout(()=>chips(c.concat([{texto:"Sacar "+palabra(),hacer:iniciarTurno}])),700);
+}
+
+/* --- lo que llega por la caja de texto --- */
+function alRecibir(raw){
+  const e=entender(raw), fl=flujo;
+  const datos=e.servicioId||e.recursoId!==undefined||e.fecha||e.hora||e.franja||e.nombre||e.tel;
+  // mini-flujo de cancelar / cambiar / confirmar un turno ya sacado
+  if(fl&&fl.modo){
+    if(e.cancelar) return cancelarFlujo();
+    if(fl.espera==="tel-gestion"){
+      if(e.tel) return buscarTurnos(e.tel);
+      return preguntarG("Pasame el celular con el que sacaste "+elTurno()+" (solo los números).",[]);
+    }
+    bot(["Elegí una opción 👇"]); return setTimeout(fl.rerender,500);
+  }
+  if(fl&&fl.espera==="tel"&&e.tel){ fl.tel=e.tel; if(e.nombre) fl.nombre=e.nombre; return avanzar(); }
+  if(fl&&fl.espera==="nombre"&&!datos&&!e.info&&!e.faq&&!e.cancelar&&!e.cancelarTurno){
+    const n=raw.replace(/^(soy|me llamo|mi nombre es|a nombre de)\s+/i,"").trim();
+    if(n.length<2||n.length>40) return bot(["¿Me pasás tu nombre?"]);
+    fl.nombre=n.split(/\s+/).slice(0,3).map(cap).join(" "); return avanzar();
+  }
+  if(e.cancelarTurno) return iniciarGestion("cancelar",e.tel);
+  if(e.confirmar&&!fl&&!(e.servicioId||e.fecha||e.hora||e.franja)) return iniciarGestion("confirmar",e.tel);
+  if(e.cancelar&&fl) return cancelarFlujo();
+  const esTurno=e.turno||e.fecha||e.hora||e.franja||(fl&&datos)||(e.servicioId&&e.ganas&&e.info!=="precio");
+  if(esTurno&&!(e.info==="precio"&&!e.fecha&&!e.hora&&!e.turno)){
+    flujo=fl||{}; const n=aplicar(e); return avanzar(n>=2);
+  }
+  if(e.info==="precio") return responderInfo("precio",e, fl?()=>setTimeout(avanzar,900):null);
+  if(e.faq){ bot([esc(e.faq)]); return fl?setTimeout(avanzar,900):setTimeout(menuChips,650); }
+  if(e.info) return responderInfo(e.info,e, fl?()=>setTimeout(avanzar,900):null);
+  if(e.servicioId){ bot([infoServicio(e.servicioId)+"\n¿Te saco "+(palabra()==="reserva"?"una reserva":"un turno")+"?"]);
+    return setTimeout(()=>chips([{texto:"Sí, dale",hacer:()=>{flujo={servicioId:e.servicioId};avanzar();}},{texto:"No, gracias",hacer:()=>responderInfo("gracias")}]),600); }
+  if(fl){ bot(["No te entendí 🙈 Usá los botones, o escribime algo como “el viernes a las 5”."]); return setTimeout(avanzar,800); }
+  sinDato();
+}
+function aplicar(e){
+  let n=0; const fl=flujo;
+  if(e.servicioId){fl.servicioId=e.servicioId;n++;}
+  if(e.recursoId!==undefined){fl.recursoId=e.recursoId;n++;}
+  if(e.fecha){ if(fl.fecha!==e.fecha&&!e.hora) fl.hora=null; fl.fecha=e.fecha;n++;}
+  if(e.franja){fl.franja=e.franja; if(!e.hora) fl.hora=null; n++;}
+  if(e.hora){fl.hora=e.hora;n++;}
+  if(e.nombre){fl.nombre=e.nombre;n++;}
+  if(e.tel){fl.tel=e.tel;n++;}
+  return n;
+}
+
+/* --- el turno se arma pidiendo solo lo que falta --- */
+function iniciarTurno(){ flujo={}; avanzar(); }
+function cancelarFlujo(){ flujo=null; bot(["Listo, lo dejamos para otro momento 👍"]); setTimeout(menuChips,500); }
+function preguntar(texto,items){ bot([texto]); setTimeout(()=>chips(items.concat([{texto:"Cancelar",hacer:cancelarFlujo}])),480); }
+
+/* --- cancelar, cambiar o confirmar un turno ya sacado (se busca por celular) --- */
+const elTurno=()=>palabra()==="reserva"?"la reserva":"el turno";
+function preguntarG(texto,items){ bot([texto]); setTimeout(()=>chips(items.concat([{texto:"Volver",hacer:cancelarFlujo}])),480); }
+function turnosDe(tel){
+  return S.turnos.filter(t=>mismoTel(t.tel,tel)&&t.estado==="pendiente"&&t.fecha>=hoyIso()&&estadoVisible(t)==="pendiente")
+    .sort((a,b)=>(a.fecha+a.hora).localeCompare(b.fecha+b.hora));
+}
+function iniciarGestion(modo,tel){
+  flujo={modo,espera:"tel-gestion"};
+  if(tel) return buscarTurnos(tel);
+  preguntarG("Dale. Pasame el celular con el que sacaste "+elTurno()+" y lo busco.",[]);
+}
+function buscarTurnos(tel){
+  const fl=flujo, ts=turnosDe(tel); fl.tel=tel;
+  if(!ts.length){
+    flujo=null; const c=contactoChips();
+    bot(["No encuentro ningún "+palabra()+" pendiente con ese número 🤔 Fijate que sea el mismo con el que lo sacaste"+(c.length?", o escribile al local:":".")]);
+    return setTimeout(()=>chips(c.concat([{texto:"Sacar "+palabra(),hacer:iniciarTurno}])),600);
+  }
+  if(fl.modo==="confirmar"&&ts.length===1) return confirmarTurnoChat(ts[0]);
+  fl.espera="elegir"; fl.rerender=()=>listarGestion(ts); listarGestion(ts);
+}
+function listarGestion(ts){
+  const fl=flujo;
+  preguntarG(fl.modo==="confirmar"?"¿Cuál confirmás?":"Encontré esto. ¿Cuál es?",
+    ts.map(t=>({texto:etiquetaDia(t.fecha)+" "+t.hora+" · "+t.servicioNombre,hacer:()=>{
+      if(fl.modo==="confirmar") return confirmarTurnoChat(t);
+      fl.espera="accion"; fl.rerender=()=>ofrecerAccion(t); ofrecerAccion(t); }})));
+}
+function ofrecerAccion(t){
+  preguntarG(cap(elTurno())+" del "+etiquetaDia(t.fecha)+" a las "+t.hora+" h ("+esc(t.servicioNombre)+"). ¿Qué hacemos?",
+    [{texto:"Cancelarlo",hacer:()=>cancelarTurnoChat(t)},{texto:"Cambiar día u hora",hacer:()=>cambiarTurnoChat(t)}]);
+}
+async function cancelarTurnoChat(t){
+  flujo=null;
+  try{ await cambiarTurno(t.id,{estado:"cancelado"}); }
+  catch(err){ bot(["No pude cancelarlo ahora. Probá de nuevo en un rato o avisale al local."]); return setTimeout(menuChips,900); }
+  bot(["Listo, cancelé "+elTurno()+" ("+etiquetaDia(t.fecha)+" "+t.hora+" h). Ya liberé el lugar ✅\nCuando quieras, sacás otro."]);
+  setTimeout(menuChips,900);
+}
+async function cambiarTurnoChat(t){
+  try{ await cambiarTurno(t.id,{estado:"cancelado"}); }
+  catch(err){ flujo=null; bot(["No pude liberar el lugar ahora. Probá de nuevo en un rato o avisale al local."]); return setTimeout(menuChips,900); }
+  flujo={servicioId:t.servicioId,recursoId:S.ficha.recursos.some(r=>r.id===t.recursoId)?t.recursoId:undefined,nombre:t.nombre,tel:t.tel};
+  bot(["Dale, liberé el anterior. Elegimos el nuevo:"]);
+  setTimeout(()=>avanzar(),700);
+}
+async function confirmarTurnoChat(t){
+  flujo=null;
+  if(!t.confirmado){
+    try{ await cambiarTurno(t.id,{confirmado:true}); }
+    catch(err){ bot(["No pude confirmarlo ahora. Probá de nuevo en un rato."]); return setTimeout(menuChips,900); }
+  }
+  bot(["¡Listo! Te esperamos. 🙌\n"+cap(etiquetaDia(t.fecha))+" a las "+t.hora+" h ("+esc(t.servicioNombre)+")."]);
+  setTimeout(menuChips,900);
+}
+function enFranja(h,fr){ const x=aMin(h); return !fr||(x>=fr[0]&&x<fr[1]); }
+const nombreFranja=fr=>fr?" "+fr[2]:"";
+function resumenFlujo(){
+  const f=S.ficha, fl=flujo, p=[];
+  if(fl.servicioId) p.push(f.servicios.find(s=>s.id===fl.servicioId).nombre);
+  if(fl.recursoId) p.push("con "+f.recursos.find(r=>r.id===fl.recursoId).nombre);
+  if(fl.fecha) p.push(etiquetaDia(fl.fecha)); if(fl.hora) p.push(fl.hora+" h"); else if(fl.franja) p.push(nombreFranja(fl.franja).trim());
+  return p.join(" · ");
+}
+function avanzar(eco){
+  const f=S.ficha, fl=flujo; if(!fl) return;
+  const pre=eco?"Perfecto: "+esc(resumenFlujo())+".\n":"";
+  if(fl.servicioId&&!f.servicios.some(s=>s.id===fl.servicioId)) fl.servicioId=null;
+  if(!fl.servicioId){ fl.espera="servicio";
+    return preguntar(pre+(fl.fecha||fl.hora?"Dale. ":"¡Dale! ")+"¿Qué te vas a hacer?",f.servicios.map(s=>({texto:s.nombre+" · "+precioTxt(s),hacer:()=>{fl.servicioId=s.id;avanzar();}}))); }
+  const srv=f.servicios.find(s=>s.id===fl.servicioId);
+  if(f.recursos.length<2&&fl.recursoId===undefined) fl.recursoId=f.recursos[0]?.id||null;
+  if(fl.recursoId===undefined&&!fl.hora){ fl.espera="recurso";
+    const lugar=["mesa","cancha","box","sala","consultorio"].includes(norm(f.recurso));
+    return preguntar(pre+(lugar?"¿Tenés preferencia de "+esc(f.recurso)+"?":"¿Con quién te gustaría atenderte?"),
+      f.recursos.map(r=>({texto:r.nombre,hacer:()=>{fl.recursoId=r.id;avanzar();}})).concat([{texto:"Me da igual",hacer:()=>{fl.recursoId=null;avanzar();}}])); }
+  const rid=fl.recursoId||null;
+  if(fl.fecha&&!diasAbiertos().includes(fl.fecha)){
+    const d=desdeIso(fl.fecha), cerrado=!f.horarios[d.getDay()];
+    bot([(cerrado?"El "+DIAS_L[d.getDay()].toLowerCase()+" no atendemos.":"Ese día todavía no se puede reservar (hasta "+f.anticipacion+" días adelante).")]);
+    fl.fecha=null; fl.hora=null; return setTimeout(()=>avanzar(),700);
+  }
+  if(!fl.fecha){ fl.espera="fecha";
+    const dias=diasAbiertos().filter(d=>libres(d,srv,rid).some(h=>enFranja(h.hora,fl.franja))).slice(0,8);
+    if(!dias.length){ bot([pre+"Uf, no me quedan lugares"+nombreFranja(fl.franja)+" en los próximos días 😕"]); fl.franja=null; return setTimeout(()=>chips(contactoChips().concat([{texto:"Ver otros horarios",hacer:()=>avanzar()}])),600); }
+    return preguntar(pre+"¿Qué día te viene bien?",dias.map(d=>({texto:etiquetaDia(d),hacer:()=>{fl.fecha=d;avanzar();}})));
+  }
+  const todos=libres(fl.fecha,srv,rid);
+  if(fl.hora){
+    if(!todos.some(h=>h.hora===fl.hora)){
+      const pedida=aMin(fl.hora); fl.hora=null;
+      const cerca=todos.slice().sort((a,b)=>Math.abs(aMin(a.hora)-pedida)-Math.abs(aMin(b.hora)-pedida)).slice(0,6).sort((a,b)=>aMin(a.hora)-aMin(b.hora));
+      if(!cerca.length){ bot([pre+etiquetaDia(fl.fecha)+" ya no me queda nada."]); fl.fecha=null; return setTimeout(()=>avanzar(),700); }
+      fl.espera="hora";
+      return preguntar(pre+"A las "+aHora(pedida)+" no tengo libre"+(rid?" con "+esc(f.recursos.find(r=>r.id===rid).nombre):"")+". Lo más cerca que tengo "+etiquetaDia(fl.fecha).toLowerCase()+":",
+        cerca.map(h=>({texto:h.hora,hacer:()=>{fl.hora=h.hora;avanzar();}})).concat([{texto:"Otro día",hacer:()=>{fl.fecha=null;fl.hora=null;avanzar();}}]));
+    }
+  }else{
+    fl.espera="hora";
+    let hs=todos.filter(h=>enFranja(h.hora,fl.franja)), aviso="";
+    if(!hs.length&&todos.length){ aviso=esc(cap(nombreFranja(fl.franja).trim()))+" no me queda nada. "; hs=todos; }
+    if(!hs.length){ bot([pre+etiquetaDia(fl.fecha)+" ya no me queda nada."]); fl.fecha=null; return setTimeout(()=>avanzar(),700); }
+    return preguntar(pre+aviso+"Estos horarios están libres "+etiquetaDia(fl.fecha).toLowerCase()+":",
+      hs.slice(0,14).map(h=>({texto:h.hora,hacer:()=>{fl.hora=h.hora;avanzar();}})).concat([{texto:"Otro día",hacer:()=>{fl.fecha=null;fl.hora=null;avanzar();}}]));
+  }
+  if(!fl.nombre){ fl.espera="nombre"; return bot([pre+"Buenísimo. ¿A nombre de quién lo anoto?"]); }
+  if(!fl.tel){ fl.espera="tel"; return bot([pre+"Gracias, "+esc(fl.nombre)+". ¿Y un celular para el recordatorio?"]); }
+  fl.espera="confirmar";
+  if(pre) bot([pre.trim()]);
+  mostrarPropuesta(fl,srv);
+}
+function mostrarPropuesta(p,srv){
+  const rec=p.recursoId?S.ficha.recursos.find(r=>r.id===p.recursoId):null;
+  setTimeout(()=>{
+    chipsBox.innerHTML="";
+    const d=document.createElement("div"); d.className="propuesta";
+    d.innerHTML="<div><b>"+esc(srv.nombre)+"</b> · "+precioTxt(srv)+"<br>"+etiquetaDia(p.fecha)+" a las "+esc(p.hora)+" h"+(rec?" · con "+esc(rec.nombre):"")+"<br>"+(pideSena(srv)?"<b class='num'>Seña: "+plata(senaMonto(srv))+"</b> "+(senaObligatoria()?"para reservar":"para dejarlo reservado")+"<br>":"")+"<span class='nota'>A nombre de "+esc(p.nombre)+" · "+esc(p.tel)+"</span></div><div class='acc'></div>";
+    const acc=d.querySelector(".acc");
+    const boton=(txt,cls,fn)=>{const b=document.createElement("button");b.type="button";b.className="chip"+cls;b.textContent=txt;b.onclick=()=>{chipsBox.innerHTML="";burbuja("yo",esc(txt));fn();};acc.appendChild(b);};
+    boton("Confirmar"," lleno",()=>{ const x={...p}; flujo=null; cerrarReserva({servicioId:x.servicioId,recursoId:x.recursoId||null,fecha:x.fecha,hora:x.hora,nombre:x.nombre,tel:x.tel,origen:"chat"}); });
+    boton("Cambiar día u hora","",()=>{ p.fecha=null;p.hora=null;p.franja=null;avanzar(); });
+    boton("Cancelar","",cancelarFlujo);
+    chipsBox.appendChild(d); hilo.scrollTop=hilo.scrollHeight;
+  },520);
+  bot(["Revisá que esté todo bien y confirmá 👇"]);
+}
+async function cerrarReserva(p){
+  const r=await reservar(p);
+  if(!r.ok){ bot([esc(r.motivo)]); flujo={...p,hora:null}; return setTimeout(()=>avanzar(),700); }
+  const t=r.t;
+  if(t.sena&&t.sena.estado==="pendiente"){
+    bot([{html:"📝 Te lo tomo: <b>"+esc(t.servicioNombre)+"</b> · "+etiquetaDia(t.fecha)+" a las "+t.hora+" h."}]);
+    return setTimeout(()=>pasoSena(t),900);
+  }
+  bot([{html:"✅ <b>¡Listo, quedó anotado!</b><div class='ficha'><div><span>Servicio</span>"+esc(t.servicioNombre)+"</div><div><span>Con</span>"+esc(t.recursoNombre)+"</div><div><span>Día</span>"+etiquetaDia(t.fecha)+"</div><div><span>Hora</span>"+t.hora+" h</div><div><span>Nombre</span>"+esc(t.nombre)+"</div></div>"},
+       "Si no podés venir, escribime “cancelar mi "+palabra()+"” así liberamos el lugar. ¡Gracias!"]);
+  setTimeout(menuChips,900);
+}
+/* seña simulada: la demo muestra el alias; en la versión real el cobro lo hace Mercado Pago solo */
+function pasoSena(t){
+  const s=senaDe(S.ficha), alias=String(s.alias||"").trim(), url=/^https?:\/\//i.test(alias)?alias:null, oblig=!!s.obligatoria;
+  bot([{html:"💳 <b>"+(oblig?"Para dejar reservado, dejá la seña":"Para dejarlo reservado, mandá la seña")+"</b><div class='ficha'><div><span>Monto</span><b class='num'>"+plata(t.sena.monto)+"</b></div>"+
+      "<div><span>"+(url?"Pago":"Alias")+"</span>"+(url?"Link de Mercado Pago":esc(alias))+"</div>"+(s.nota?"<div><span>Nota</span>"+esc(s.nota)+"</div>":"")+"</div>"},
+    oblig?"Sin la seña, el lugar no queda reservado. (En la versión real el cobro es automático por Mercado Pago.)":"Esto es una demo: en la versión real el cobro es automático por Mercado Pago, sin transferir a mano."]);
+  const volver=()=>setTimeout(menuChips,900);
+  const ya=async()=>{
+    try{ await cambiarTurno(t.id,{sena:{...t.sena,estado:"declarada"}}); }
+    catch(err){ bot(["No pude avisarle al local ahora. Mostrales el comprobante cuando vengas."]); return volver(); }
+    bot(["¡Gracias! 🙌 Le avisamos al local: ahí verifican la seña y te la confirman."]); volver();
+  };
+  const cancelar=async()=>{
+    try{ await cambiarTurno(t.id,{estado:"cancelado"}); }catch(err){}
+    bot(["Listo, no te cobro nada y liberé el lugar. Cuando quieras lo sacás de nuevo 👍"]); volver();
+  };
+  const copiar=async()=>{
+    let ok=false; try{ await navigator.clipboard.writeText(alias); ok=true; }catch(err){}
+    burbuja("bot",(ok?"Alias copiado: ":"Este es el alias: ")+"<b>"+esc(alias)+"</b>"); opciones();
+  };
+  function opciones(){ chips([
+    {texto:"Ya la transferí",lleno:true,hacer:ya},
+    url?{texto:"Pagar con Mercado Pago",eco:false,hacer:()=>{ burbuja("bot",'Tocá acá: <a href="'+escA(url)+'" target="_blank" rel="noopener">Pagar la seña</a>'); opciones(); }}
+       :{texto:"Copiar alias",eco:false,hacer:copiar},
+    oblig?{texto:"Cancelar el "+palabra(),hacer:cancelar}
+         :{texto:"La pago después",hacer:()=>{ bot(["Dale, el lugar queda anotado. Mandá la seña antes de venir para dejarlo firme."]); volver(); }},
+  ]); }
+  setTimeout(opciones,760);
+}
+function pintarEstadoChat(){ document.getElementById("estadoChat").textContent="Asistente · responde al instante"; }
+
+function ajustarCaja(){ caja.style.height="auto"; caja.style.height=Math.min(caja.scrollHeight,96)+"px"; btnEnviar.disabled=!caja.value.trim(); }
+caja.addEventListener("input",ajustarCaja);
+caja.addEventListener("keydown",e=>{ if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();barra.requestSubmit();} });
+barra.addEventListener("submit",e=>{
+  e.preventDefault(); const v=caja.value.trim(); if(!v) return;
+  caja.value=""; ajustarCaja(); burbuja("yo",esc(v)); chipsBox.innerHTML="";
+  alRecibir(v);
+});
+
+/* =====================================================================
+   CARA 2 · LOCAL (agenda, cerrar turnos, caja)
+   ===================================================================== */
+const hojaLocal=document.getElementById("hojaLocal");
+const PAGOS=["Efectivo","Mercado Pago","Tarjeta","Transferencia"];
+function estadoVisible(t){
+  if(t.estado==="pendiente"){ const fin=desdeIso(t.fecha); fin.setMinutes(aMin(t.hora)+(t.dur||30)); if(fin<new Date()) return "sin"; }
+  return t.estado;
+}
+const NOMBRE_ESTADO={pendiente:"Pendiente",sin:"Sin cerrar",atendido:"Atendido",no_vino:"No vino",cancelado:"Cancelado"};
+function waLink(t){
+  let d=(t.tel||"").replace(/\D/g,""); if(!d) return null;
+  if(d.length===10) d="549"+d; else if(d.length===11&&d.startsWith("15")) d="549"+d.slice(2);
+  const sn=t.sena&&t.sena.estado==="pendiente"?t.sena:null, f=S.ficha;
+  const msg="Hola "+(t.nombre||"")+"! Te recordamos tu "+(palabra())+" en "+f.nombre+": "+etiquetaDia(t.fecha)+" a las "+t.hora+" h ("+t.servicioNombre+")."+
+    (sn?" Acordate de la seña de "+plata(sn.monto)+(senaDe(f).alias?" (alias: "+senaDe(f).alias+")":"")+".":"")+
+    (f.pedirConfirmacion===false?" Si no podés venir, avisanos 🙌":" Si no podés venir, avisanos. Confirmá respondiendo SÍ 🙌");
+  return "https://wa.me/"+d+"?text="+encodeURIComponent(msg);
+}
+/* pendiente, sin recordar, y cae dentro de las próximas `hs` horas */
+function paraRecordar(t,hs,ahora){
+  if(t.estado!=="pendiente"||t.recordado) return false;
+  const ini=desdeIso(t.fecha); ini.setMinutes(aMin(t.hora)); const dt=ini-ahora;
+  return dt>0&&dt<=hs*36e5;
+}
+/* los turnos de lo que está mirando el panel (día, sin cerrar o por recordar) */
+function turnosDelPanel(){
+  const hs=Number(S.ficha.recordatorioHoras)||24, ahora=Date.now();
+  const l=S.diaPanel==="sin"?S.turnos.filter(t=>estadoVisible(t)==="sin"):S.diaPanel==="recordar"?S.turnos.filter(t=>paraRecordar(t,hs,ahora)):S.turnos.filter(t=>t.fecha===S.diaPanel);
+  return l.sort((a,b)=>(a.fecha+a.hora).localeCompare(b.fecha+b.hora));
+}
+/* buscador: nombre o celular, de cualquier día, lo más reciente primero */
+function buscarTurnosPanel(q){
+  const n=norm(q), soloTel=/^[\d\s+()-]+$/.test(q), d=dig(q);
+  return S.turnos.filter(t=>norm(t.nombre).includes(n)||(soloTel&&d.length>=2&&dig(t.tel).includes(d)))
+    .sort((a,b)=>(b.fecha+b.hora).localeCompare(a.fecha+a.hora));
+}
+const verFecha=()=>S.diaPanel==="sin"||S.diaPanel==="recordar"||(S.busqueda||"").trim().length>=2;
+function textoResumen(){
+  const ls=turnosDelPanel(), act=ls.filter(t=>t.estado!=="cancelado"), at=ls.filter(t=>t.estado==="atendido");
+  const titulo=S.diaPanel==="sin"?"Sin cerrar":S.diaPanel==="recordar"?"Por recordar":etiquetaDia(S.diaPanel);
+  const lin=act.map(t=>{
+    const sn=t.sena&&t.sena.estado!=="no"?" · seña "+t.sena.estado+" "+plata(t.sena.monto):"";
+    return (verFecha()?etiquetaDia(t.fecha)+" ":"")+t.hora+" · "+(t.nombre||"Sin nombre")+" · "+t.servicioNombre+" · "+NOMBRE_ESTADO[estadoVisible(t)]+(t.estado==="atendido"&&t.pago?" ("+t.pago+")":"")+sn;
+  });
+  return S.ficha.nombre+" · "+titulo+"\n"+lin.join("\n")+"\n\nTotal: "+act.length+" · Atendidos: "+at.length+" · Caja: "+plata(at.reduce((s,t)=>s+(t.precio||0),0));
+}
+async function copiarResumen(){
+  const txt=textoResumen(), n=document.getElementById("nota-copia"); if(!n) return;
+  try{ await navigator.clipboard.writeText(txt); n.textContent="Copiado ✓"; n.className="nota ok"; return; }catch(err){}
+  // sin portapapeles: se muestra el texto para copiarlo a mano
+  n.textContent="No pude copiar solo. Copialo de acá:"; n.className="nota mal";
+  const ta=document.createElement("textarea"); ta.readOnly=true; ta.value=txt; ta.rows=Math.min(12,txt.split("\n").length+1); ta.style.cssText="width:100%;border:1px solid var(--line);border-radius:10px;padding:9px 10px;background:var(--surface)";
+  n.closest(".acciones").after(ta); ta.focus(); ta.select();
+}
+function pintarLocal(){
+  const f=S.ficha;
+  const foco=document.activeElement&&document.activeElement.id==="busca";
+  const dias=[hoyIso()].concat(diasAbiertos().filter(d=>d!==hoyIso())).slice(0,8);
+  if(!S.diaPanel) S.diaPanel=hoyIso();
+  const sinCerrar=S.turnos.filter(t=>estadoVisible(t)==="sin");
+  const conteo=d=>S.turnos.filter(t=>t.fecha===d&&t.estado!=="cancelado").length;
+  const porRecordar=S.turnos.filter(t=>paraRecordar(t,Number(f.recordatorioHoras)||24,Date.now()));
+  const delDia=turnosDelPanel();
+  const q=(S.busqueda||"").trim(), lista=q.length>=2?buscarTurnosPanel(q):delDia;
+  const activos=delDia.filter(t=>t.estado!=="cancelado");
+  const atendidos=delDia.filter(t=>t.estado==="atendido");
+  const caja=atendidos.reduce((s,t)=>s+(t.precio||0),0);
+  const porMedio={}; atendidos.forEach(t=>{porMedio[t.pago||"Sin dato"]=(porMedio[t.pago||"Sin dato"]||0)+(t.precio||0);});
+  const pendientes=activos.filter(t=>t.estado==="pendiente").length;
+
+  let h="<div class='cab'><div><h2>"+esc(f.nombre)+"</h2><p class='sub'>Agenda del local · "+esc(f.rubro)+"</p></div>"+
+    "<div class='modo'><span class='punto"+(S.compartido?"":" no")+"'></span>"+(S.compartido?"En vivo: lo que se reserva en el chat aparece acá":"Solo en este dispositivo")+"</div></div>";
+  h+="<div class='dias' role='group' aria-label='Día'>"+dias.map(d=>{const dd=desdeIso(d),n=conteo(d);
+      return "<button class='dia' data-dia='"+d+"' aria-pressed='"+(S.diaPanel===d)+"'><small>"+(d===hoyIso()?"Hoy":DIAS[dd.getDay()])+"</small><b>"+dd.getDate()+"</b><span class='n'>"+(n?n+" "+(n===1?palabra():palabra()+"s"):"")+"</span></button>";}).join("")+
+    (sinCerrar.length?"<button class='dia alerta' data-dia='sin' aria-pressed='"+(S.diaPanel==="sin")+"'><small>Revisar</small><b>"+sinCerrar.length+"</b><span class='n'>sin cerrar</span></button>":"")+
+    (porRecordar.length||S.diaPanel==="recordar"?"<button class='dia' data-dia='recordar' aria-pressed='"+(S.diaPanel==="recordar")+"'><small>Recordar</small><b>"+porRecordar.length+"</b><span class='n'>por avisar</span></button>":"")+"</div>";
+  h+="<div class='cifras'><div class='cifra'><small>"+(palabra()==="reserva"?"Reservas":"Turnos")+"</small><b>"+activos.length+"</b></div><div class='cifra'><small>Por atender</small><b>"+pendientes+"</b></div>"+
+     "<div class='cifra'><small>Atendidos</small><b>"+atendidos.length+"</b></div><div class='cifra'><small>Caja</small><b>"+plata(caja)+"</b></div></div>";
+  if(atendidos.length) h+="<div class='medios num'>"+Object.entries(porMedio).map(([k,v])=>esc(k)+" "+plata(v)).join(" · ")+"</div>";
+  const senaRec=activos.filter(t=>t.sena&&t.sena.estado==="recibida").reduce((s,t)=>s+(t.sena.monto||0),0);
+  const senaDec=activos.filter(t=>t.sena&&t.sena.estado==="declarada").reduce((s,t)=>s+(t.sena.monto||0),0);
+  if(senaRec||senaDec) h+="<div class='medios num'>Señas del día: "+plata(senaRec)+" recibidas"+(senaDec?" · "+plata(senaDec)+" por verificar":"")+"</div>";
+  h+="<div class='acciones'><button class='btn pri' data-act='agregar'>"+(S.agregando?"Cerrar":"+ Agregar "+palabra())+"</button>"+
+     (activos.length?"<button class='btn' data-act='copiar'>Copiar resumen del día</button><span class='nota' id='nota-copia'></span>":"")+
+     "<span class='nota'>Para el que llega sin "+palabra()+" o llama por teléfono.</span></div>";
+  if(S.agregando) h+=formAgregar();
+  h+="<div class='buscar'><input id='busca' type='search' autocomplete='off' placeholder='Buscar cliente por nombre o teléfono' aria-label='Buscar cliente por nombre o teléfono' value='"+escA(S.busqueda||"")+"'></div>";
+  if(!lista.length){
+    h+="<div class='vacio'>"+(q.length>=2?"No encontré a nadie con “"+esc(q)+"”.":S.diaPanel==="sin"?"Todo cerrado. Bien ahí.":S.diaPanel==="recordar"?"Nada por recordar. Bien ahí.":"Todavía no hay "+palabra()+"s este día.<br>Probá sacar uno desde la cara <b>Cliente</b> y mirá cómo aparece acá.")+"</div>";
+  }else{
+    h+="<div class='lista'>"+lista.map(filaTurno).join("")+"</div>";
+  }
+  hojaLocal.innerHTML=h;
+  if(foco){ const i=document.getElementById("busca"); if(i){ i.focus(); const n=i.value.length; try{i.setSelectionRange(n,n);}catch(err){} } }
+}
+function filaTurno(t){
+  const ev=estadoVisible(t), abierto=S.abierto===t.id, apagado=t.estado==="cancelado"||t.estado==="no_vino";
+  const sn=t.sena&&t.sena.estado!=="no"?t.sena:null;
+  const marcas=t.estado==="cancelado"?"":(t.confirmado?"<span class='pill atendido'>Confirmó ✓</span>":"")+
+    (sn?"<span class='pill "+({pendiente:"pendiente",declarada:"warn",recibida:"atendido"}[sn.estado]||"")+"'>"+({pendiente:"Seña ⏳",declarada:"Seña declarada",recibida:"Seña ✓"}[sn.estado]||"Seña")+" "+plata(sn.monto)+"</span>":"");
+  let h="<div class='turno"+(apagado?" apagado":"")+"'><div class='hora'>"+t.hora+"</div><div class='info'><b>"+esc(t.nombre||"Sin nombre")+"</b><span>"+esc(t.servicioNombre)+" · "+esc(t.recursoNombre)+(verFecha()?" · "+etiquetaDia(t.fecha):"")+
+    "<span class='origen'>"+(t.origen==="chat"?"por el chat":"cargado en el local")+"</span></span></div>"+
+    "<button class='pill "+ev+"' data-act='abrir' data-id='"+t.id+"' aria-expanded='"+abierto+"'>"+NOMBRE_ESTADO[ev]+(t.estado==="atendido"&&t.pago?" · "+esc(t.pago):"")+"</button>"+
+    (marcas?"<div class='marcas'>"+marcas+"</div>":"");
+  if(abierto){
+    h+="<div class='acc'>";
+    if(t.estado==="pendiente"){
+      h+=PAGOS.map(p=>"<button class='btn ok' data-act='cerrar' data-pago='"+p+"' data-id='"+t.id+"'>✓ "+p+"</button>").join("");
+      if(sn&&(sn.estado==="pendiente"||sn.estado==="declarada")) h+="<button class='btn ok' data-act='sena' data-id='"+t.id+"'>Seña recibida</button>";
+      if(!t.confirmado) h+="<button class='btn' data-act='confirmo' data-id='"+t.id+"'>Marcar confirmado</button>";
+      h+="<button class='btn' data-act='novino' data-id='"+t.id+"'>No vino</button>";
+      h+="<button class='btn peligro' data-act='cancelar' data-id='"+t.id+"'>"+(S.confirmar===t.id?"¿Seguro? Tocá de nuevo":"Cancelar")+"</button>";
+      const w=waLink(t); if(w) h+="<a class='btn' data-act='recordar' data-id='"+t.id+"' href='"+w+"' target='_blank' rel='noopener'>"+(t.recordado?"Recordar de nuevo":"Recordar por WhatsApp")+"</a>";
+    }else{
+      h+="<button class='btn' data-act='deshacer' data-id='"+t.id+"'>Volver a pendiente</button>";
+    }
+    if(t.tel) h+="<span class='nota num'>"+esc(t.tel)+"</span>";
+    if(t.tel){ // historial del cliente, por celular
+      const otros=S.turnos.filter(x=>x.id!==t.id&&mismoTel(x.tel,t.tel));
+      if(!otros.length) h+="<span class='nota'>Cliente nuevo</span>";
+      else{ const v=otros.concat([t]).filter(x=>x.estado==="atendido").length, a=otros.concat([t]).filter(x=>x.estado==="no_vino").length;
+        h+="<span class='nota'>Cliente: "+v+(v===1?" visita":" visitas")+" · "+a+(a===1?" ausencia":" ausencias")+"</span>"; }
+    }
+    h+="</div>";
+  }
+  return h+"</div>";
+}
+function formAgregar(){
+  const f=S.ficha, fecha=S.diaPanel==="sin"?hoyIso():S.diaPanel;
+  return "<form class='caja' id='fAgregar'><h3>Nuevo "+palabra()+" · "+etiquetaDia(fecha)+"</h3><div class='campos'>"+
+   "<label class='c'>Nombre (opcional)<input id='ag-nombre' autocomplete='off'></label>"+
+   "<label class='c'>Celular (opcional)<input id='ag-tel' inputmode='tel' autocomplete='off'></label>"+
+   "<label class='c'>Servicio<select id='ag-srv'>"+f.servicios.map(s=>"<option value='"+s.id+"'>"+esc(s.nombre)+" · "+precioTxt(s)+"</option>").join("")+"</select></label>"+
+   "<label class='c'>"+esc(cap(f.recurso))+"<select id='ag-rec'>"+f.recursos.map(r=>"<option value='"+r.id+"'>"+esc(r.nombre)+"</option>").join("")+"</select></label>"+
+   "<label class='c'>Hora<select id='ag-hora'></select></label></div>"+
+   "<label class='check'><input type='checkbox' id='ag-ya' checked> Ya lo atendí (cierra con el pago)</label>"+
+   "<label class='c' id='ag-pago-w'>Cómo pagó<select id='ag-pago'>"+PAGOS.map(p=>"<option>"+p+"</option>").join("")+"</select></label>"+
+   "<div class='acciones'><button class='btn pri' type='submit'>Guardar</button><span class='nota' id='ag-nota'></span></div></form>";
+}
+const cap=s=>(s||"").charAt(0).toUpperCase()+(s||"").slice(1);
+function horasAgregar(){
+  const sel=document.getElementById("ag-hora"); if(!sel) return;
+  const f=S.ficha, fecha=S.diaPanel==="sin"?hoyIso():S.diaPanel, srv=f.servicios.find(s=>s.id===document.getElementById("ag-srv").value);
+  const ya=document.getElementById("ag-ya").checked, rec=document.getElementById("ag-rec").value;
+  document.getElementById("ag-pago-w").hidden=!ya;
+  let ops;
+  if(ya){ const a=new Date(); const m=Math.floor((a.getHours()*60+a.getMinutes())/5)*5; ops=["<option value='"+aHora(m)+"'>Ahora ("+aHora(m)+")</option>"]; }
+  else{ const hs=libresSinCorte(fecha,srv,rec); ops=hs.length?hs.map(h=>"<option>"+h+"</option>"):["<option value=''>No hay horarios libres</option>"]; }
+  sel.innerHTML=ops.join("");
+}
+function libresSinCorte(fecha,srv,rec){ return libres(fecha,srv,rec).map(x=>x.hora); }
+hojaLocal.addEventListener("change",e=>{ if(["ag-srv","ag-rec","ag-ya"].includes(e.target.id)) horasAgregar(); });
+hojaLocal.addEventListener("input",e=>{ if(e.target.id==="busca"){ S.busqueda=e.target.value; S.abierto=null; pintarLocal(); horasAgregar(); } });
+hojaLocal.addEventListener("click",async e=>{
+  const b=e.target.closest("[data-act],[data-dia]"); if(!b) return;
+  if(b.dataset.dia){ S.diaPanel=b.dataset.dia; S.abierto=null; S.busqueda=""; return pintarLocal(), horasAgregar(); }
+  const id=b.dataset.id, act=b.dataset.act;
+  try{
+    if(act==="copiar") return copiarResumen();
+    // el link de WhatsApp se abre solo: marcamos recordado un instante después, sin repintar antes
+    if(act==="recordar"){ setTimeout(()=>cambiarTurno(id,{recordado:new Date().toISOString()}).catch(()=>{}),80); return; }
+    if(act==="sena"){ const t=S.turnos.find(x=>x.id===id); S.abierto=null; await cambiarTurno(id,{sena:{...(t&&t.sena||{monto:0}),estado:"recibida"}}); }
+    if(act==="confirmo"){ await cambiarTurno(id,{confirmado:true}); }
+    if(act==="agregar"){ S.agregando=!S.agregando; pintarLocal(); return horasAgregar(); }
+    if(act==="abrir"){ S.abierto=S.abierto===id?null:id; S.confirmar=null; return pintarLocal(); }
+    if(act==="cerrar"){ S.abierto=null; await cambiarTurno(id,{estado:"atendido",pago:b.dataset.pago,cerrado:new Date().toISOString()}); }
+    if(act==="novino"){ S.abierto=null; await cambiarTurno(id,{estado:"no_vino"}); }
+    if(act==="cancelar"){ if(S.confirmar!==id){ S.confirmar=id; return pintarLocal(); } S.confirmar=null; S.abierto=null; await cambiarTurno(id,{estado:"cancelado"}); }
+    if(act==="deshacer"){ S.abierto=null; await cambiarTurno(id,{estado:"pendiente",pago:null}); }
+  }catch(err){ pintarLocal(); return alertaLocal("No se pudo guardar el cambio. Revisá que tengas permiso para editar esta página."); }
+  pintarLocal();
+});
+hojaLocal.addEventListener("submit",async e=>{
+  if(e.target.id!=="fAgregar") return; e.preventDefault();
+  const f=S.ficha, fecha=S.diaPanel==="sin"?hoyIso():S.diaPanel, $=id=>document.getElementById(id);
+  const srv=f.servicios.find(s=>s.id===$("ag-srv").value), rec=f.recursos.find(r=>r.id===$("ag-rec").value), hora=$("ag-hora").value, ya=$("ag-ya").checked;
+  if(!hora){ $("ag-nota").textContent="Elegí un horario libre."; return; }
+  try{
+    if(ya){
+      const t={id:"m"+Date.now().toString(36)+TAB.slice(0,4),fecha,hora,dur:Number(srv.duracion),servicioId:srv.id,servicioNombre:srv.nombre,precio:Number(srv.precio)||0,
+        recursoId:rec.id,recursoNombre:rec.nombre,nombre:$("ag-nombre").value.trim(),tel:$("ag-tel").value.trim(),estado:"atendido",pago:$("ag-pago").value,origen:"local",creado:new Date().toISOString(),
+        confirmado:false,recordado:false,sena:{monto:0,estado:"no"}};
+      await guardarTurno(t);
+    }else{
+      const r=await reservar({servicioId:srv.id,recursoId:rec.id,fecha,hora,nombre:$("ag-nombre").value.trim(),tel:$("ag-tel").value.trim(),origen:"local"});
+      if(!r.ok){ $("ag-nota").textContent=r.motivo; return; }
+    }
+    S.agregando=false; pintarLocal();
+  }catch(err){ $("ag-nota").textContent="No se pudo guardar. Revisá que tengas permiso para editar esta página."; }
+});
+function alertaLocal(t){ const n=document.createElement("p"); n.className="nota mal"; n.textContent=t; hojaLocal.prepend(n); }
+
+/* =====================================================================
+   CARA 3 · CONFIGURAR (la ficha del local: el alta de 5 minutos)
+   ===================================================================== */
+const hojaConfig=document.getElementById("hojaConfig");
+function pintarConfig(){
+  if(!S.borrador) S.borrador=limpio(S.ficha);
+  const b=S.borrador;
+  // fichas guardadas antes de estos campos
+  b.sena=senaDe(b); if(b.recordatorioHoras==null) b.recordatorioHoras=24; if(b.pedirConfirmacion==null) b.pedirConfirmacion=true;
+  let h="<div class='cab'><div><h2>Ficha del local</h2><p class='sub'>Con esto el asistente queda andando. Elegí el rubro y corregí lo que no corresponda.</p></div></div>";
+  h+="<section class='bloque'><h3>1 · Rubro</h3><p class='sub'>Carga un ejemplo para arrancar más rápido. Reemplaza lo que hay abajo.</p><div class='rubros'>"+
+     Object.entries(RUBROS).map(([k,r])=>"<button class='rubro' type='button' data-rubro='"+k+"' aria-pressed='"+(b.rubroClave===k)+"'>"+esc(r.rubro)+"</button>").join("")+"</div>"+
+     (S.cambiarRubro?"<div class='acciones'><span class='nota'>Se reemplaza toda la ficha por el ejemplo de "+esc(RUBROS[S.cambiarRubro].rubro)+".</span><button class='btn pri' type='button' data-act='rubro-si'>Sí, cargar ejemplo</button><button class='btn' type='button' data-act='rubro-no'>No</button></div>":"")+"</section>";
+  h+="<section class='bloque'><h3>2 · Datos del local</h3><div class='campos'>"+
+     campo("Nombre","nombre",b.nombre)+campo("Rubro (como lo dice el local)","rubro",b.rubro)+
+     campo("Dirección","direccion",b.direccion)+campo("WhatsApp (con código, ej. 54911…)","whatsapp",b.whatsapp,"tel")+
+     campo("Instagram","instagram",b.instagram)+
+     "<label class='c'>Color de la marca<input type='color' id='cf-color' data-k='color' value='"+esc(b.color)+"'></label>"+
+     "<label class='c'>Logo del local (opcional)<input type='file' id='cf-logo' accept='image/*'></label>"+
+     (b.logo?"<div class='logoprev'><img src='"+esc(b.logo)+"' alt='Logo del local'><span class='nota'>Logo cargado</span><button type='button' class='btn' data-act='quitar-logo'>Quitar</button></div>":"")+
+     "</div></section>";
+  h+="<section class='bloque'><h3>3 · Qué se reserva</h3><p class='sub'>Personas (barbero, profesional) o lugares (cancha, mesa, box). Cada uno tiene su propia agenda: no se pisan.</p><div class='campos'>"+
+     campo("Se llama","recurso",b.recurso)+
+     "<label class='c'>El cliente pide un<select id='cf-palabra' data-k='palabra'><option value='turno'"+(b.palabra==="turno"?" selected":"")+">turno</option><option value='reserva'"+(b.palabra==="reserva"?" selected":"")+">reserva</option></select></label></div>"+
+     b.recursos.map((r,i)=>"<div class='fila rec'><input id='cf-rec-"+i+"' data-l='recursos' data-i='"+i+"' data-f='nombre' value='"+esc(r.nombre)+"' aria-label='"+esc(cap(b.recurso))+" "+(i+1)+"'><button type='button' class='quitar' data-quitar='recursos' data-i='"+i+"' aria-label='Quitar'>✕</button></div>").join("")+
+     "<div><button class='btn' type='button' data-sumar='recursos'>+ Sumar "+esc(b.recurso)+"</button></div></section>";
+  h+="<section class='bloque'><h3>4 · Servicios, precios y duración</h3><p class='sub'>La duración define cuánto lugar ocupa en la agenda. Precio 0 = sin cargo. Abajo de cada uno, cómo lo piden los clientes: así el asistente los entiende.</p>"+
+     "<div class='fila srv encab'><span>Servicio</span><span>Precio $</span><span class='desk'>Minutos</span><span></span></div>"+
+     b.servicios.map((s,i)=>"<div class='fila srv'><input id='cf-srv-n-"+i+"' data-l='servicios' data-i='"+i+"' data-f='nombre' value='"+esc(s.nombre)+"' aria-label='Servicio'>"+
+       "<input id='cf-srv-p-"+i+"' class='num' type='number' min='0' step='100' data-l='servicios' data-i='"+i+"' data-f='precio' value='"+s.precio+"' aria-label='Precio'>"+
+       "<input id='cf-srv-d-"+i+"' class='num dur' type='number' min='5' step='5' data-l='servicios' data-i='"+i+"' data-f='duracion' value='"+s.duracion+"' aria-label='Minutos'>"+
+       "<button type='button' class='quitar' data-quitar='servicios' data-i='"+i+"' aria-label='Quitar'>✕</button>"+
+       "<input id='cf-srv-a-"+i+"' class='alias' data-l='servicios' data-i='"+i+"' data-f='alias' value='"+esc(s.alias||"")+"' placeholder='También le dicen (separado por comas)' aria-label='Otras formas de pedirlo'></div>").join("")+
+     "<div><button class='btn' type='button' data-sumar='servicios'>+ Sumar servicio</button></div></section>";
+  h+="<section class='bloque'><h3>5 · Días y horarios</h3>"+
+     [1,2,3,4,5,6,0].map(d=>{const x=b.horarios[d];return "<div class='fila hor'><label class='check'><input type='checkbox' id='cf-h-on-"+d+"' data-h='"+d+"' data-hf='on'"+(x?" checked":"")+"> "+DIAS_L[d]+"</label>"+
+       "<input type='time' id='cf-h-a-"+d+"' data-h='"+d+"' data-hf='abre' value='"+(x?x.abre:"")+"'"+(x?"":" disabled")+" aria-label='Abre "+DIAS_L[d]+"'>"+
+       "<input type='time' id='cf-h-c-"+d+"' data-h='"+d+"' data-hf='cierra' value='"+(x?x.cierra:"")+"'"+(x?"":" disabled")+" aria-label='Cierra "+DIAS_L[d]+"'></div>";}).join("")+
+     "<div class='campos'><label class='c'>Cada cuánto arranca un "+esc(b.palabra)+"<select id='cf-int' data-k='intervalo' data-num='1'>"+[15,20,30,45,60].map(n=>"<option value='"+n+"'"+(Number(b.intervalo)===n?" selected":"")+">cada "+n+" min</option>").join("")+"</select></label>"+
+     "<label class='c'>Se puede reservar hasta<select id='cf-ant' data-k='anticipacion' data-num='1'>"+[3,7,14,21,30,60].map(n=>"<option value='"+n+"'"+(Number(b.anticipacion)===n?" selected":"")+">"+n+" días adelante</option>").join("")+"</select></label></div></section>";
+  h+="<section class='bloque'><h3>6 · Preguntas frecuentes</h3><p class='sub'>Lo que siempre preguntan. El asistente contesta con esto y nunca inventa lo que no está.</p>"+
+     b.faqs.map((q,i)=>"<div class='fila faq'><input id='cf-faq-p-"+i+"' data-l='faqs' data-i='"+i+"' data-f='p' value='"+esc(q.p)+"' placeholder='Pregunta' aria-label='Pregunta'>"+
+       "<input id='cf-faq-r-"+i+"' class='r' data-l='faqs' data-i='"+i+"' data-f='r' value='"+esc(q.r)+"' placeholder='Respuesta' aria-label='Respuesta'>"+
+       "<button type='button' class='quitar' data-quitar='faqs' data-i='"+i+"' aria-label='Quitar'>✕</button></div>").join("")+
+     "<div><button class='btn' type='button' data-sumar='faqs'>+ Sumar pregunta</button></div></section>";
+  h+="<section class='bloque'><h3>7 · Recordatorios y seña</h3><p class='sub'>Menos ausencias: avisás al cliente antes del "+esc(b.palabra)+" y, si querés, pedís una seña para dejarlo firme.</p>"+
+     "<label class='check'><input type='checkbox' id='cf-confirma' data-k='pedirConfirmacion' data-bool='1'"+(b.pedirConfirmacion?" checked":"")+"> Pedir que el cliente confirme</label>"+
+     "<div class='campos'><label class='c'>Recordar<select id='cf-rec-hs' data-k='recordatorioHoras' data-num='1'>"+[12,24,48].map(n=>"<option value='"+n+"'"+(Number(b.recordatorioHoras)===n?" selected":"")+">"+n+" hs antes</option>").join("")+"</select></label></div>"+
+     "<label class='check'><input type='checkbox' id='cf-sena-activa' data-s='activa'"+(b.sena.activa?" checked":"")+"> Pedir seña para reservar</label>"+
+     "<label class='check'><input type='checkbox' id='cf-sena-oblig' data-s='obligatoria'"+(b.sena.obligatoria?" checked":"")+"> Seña obligatoria (sin seña, no se reserva)</label>"+
+     "<div class='campos'><label class='c'>Cómo se calcula<select id='cf-sena-tipo' data-s='tipo'><option value='fijo'"+(b.sena.tipo!=="porcentaje"?" selected":"")+">Monto fijo $</option><option value='porcentaje'"+(b.sena.tipo==="porcentaje"?" selected":"")+">Porcentaje del servicio %</option></select></label>"+
+     "<label class='c'>"+(b.sena.tipo==="porcentaje"?"Porcentaje de la seña %":"Monto de la seña $")+"<input id='cf-sena-monto' class='num' type='number' min='0' "+(b.sena.tipo==="porcentaje"?"max='100' step='5'":"step='100'")+" data-s='monto' value='"+escA(b.sena.monto)+"'></label>"+
+     "<label class='c'>Alias / CBU / usuario Mercado Pago<input id='cf-sena-alias' data-s='alias' value='"+escA(b.sena.alias)+"' autocomplete='off'></label>"+
+     "<label class='c'>Nota de la seña (opcional)<input id='cf-sena-nota' data-s='nota' value='"+escA(b.sena.nota)+"' autocomplete='off'></label></div>"+
+     "<p class='nota'>"+(b.sena.tipo==="porcentaje"?"La seña es ese % del precio de cada servicio (redondeado). ":"")+"Demo: el cliente ve el alias y avisa que transfirió; vos la marcás como recibida. En la versión real el cobro es automático por Mercado Pago.</p></section>";
+  h+="<div class='pie-guardar'><button class='btn pri' type='button' data-act='guardar'>Guardar ficha</button><button class='btn' type='button' data-act='descartar'>Descartar cambios</button><span class='nota' id='cf-nota'></span></div>";
+  hojaConfig.innerHTML=h;
+}
+const campo=(lab,k,v,tipo)=>"<label class='c'>"+lab+"<input id='cf-"+k+"' data-k='"+k+"' value='"+esc(v||"")+"'"+(tipo?" inputmode='"+tipo+"'":"")+" autocomplete='off'></label>";
+hojaConfig.addEventListener("input",e=>{
+  const el=e.target, b=S.borrador; if(!b) return;
+  if(el.dataset.k){ b[el.dataset.k]= el.dataset.bool?el.checked : el.dataset.num?Number(el.value) : el.value; if(el.dataset.k==="color") aplicarMarca(b.color); }
+  else if(el.dataset.s){ b.sena[el.dataset.s]= el.type==="checkbox"?el.checked : el.type==="number"?(el.value===""?"":Number(el.value)) : el.value;
+    if(el.id==="cf-sena-tipo"){ pintarConfigConservando(); return marcarCambios(); } }
+  else if(el.dataset.l){ const v=el.type==="number"?Number(el.value):el.value; b[el.dataset.l][Number(el.dataset.i)][el.dataset.f]=v; }
+  else if(el.dataset.h){ const d=el.dataset.h;
+    if(el.dataset.hf==="on"){ b.horarios[d]=el.checked?{abre:"10:00",cierra:"19:00"}:null; return pintarConfigConservando(); }
+    if(b.horarios[d]) b.horarios[d][el.dataset.hf]=el.value; }
+  document.getElementById("cf-nota").textContent="Hay cambios sin guardar"; document.getElementById("cf-nota").className="nota";
+});
+function pintarConfigConservando(){ const y=hojaConfig.scrollTop; pintarConfig(); hojaConfig.scrollTop=y; }
+/* el logo se achica a 256px antes de guardarlo, para que no pese en la base */
+function cargarLogo(file){
+  return new Promise((res,rej)=>{ const fr=new FileReader();
+    fr.onload=()=>{ const img=new Image(); img.onload=()=>{
+      const max=256, s=Math.min(1,max/Math.max(img.width,img.height)), w=Math.round(img.width*s), h=Math.round(img.height*s);
+      const c=document.createElement("canvas"); c.width=w; c.height=h; c.getContext("2d").drawImage(img,0,0,w,h);
+      res(c.toDataURL("image/png")); }; img.onerror=rej; img.src=fr.result; };
+    fr.onerror=rej; fr.readAsDataURL(file); });
+}
+hojaConfig.addEventListener("change",async e=>{
+  if(e.target.id!=="cf-logo"||!S.borrador) return;
+  const file=e.target.files&&e.target.files[0]; if(!file) return;
+  try{ S.borrador.logo=await cargarLogo(file); }catch(err){ return; }
+  pintarConfigConservando(); marcarCambios();
+});
+hojaConfig.addEventListener("click",async e=>{
+  const el=e.target.closest("button"); if(!el) return; const b=S.borrador;
+  if(el.dataset.act==="quitar-logo"){ b.logo=""; pintarConfigConservando(); return marcarCambios(); }
+  if(el.dataset.rubro){ S.cambiarRubro=el.dataset.rubro; return pintarConfigConservando(); }
+  if(el.dataset.act==="rubro-si"){ S.borrador=armarFicha(S.cambiarRubro); S.cambiarRubro=null; aplicarMarca(S.borrador.color); pintarConfigConservando(); return marcarCambios(); }
+  if(el.dataset.act==="rubro-no"){ S.cambiarRubro=null; return pintarConfigConservando(); }
+  if(el.dataset.sumar){ const l=el.dataset.sumar;
+    b[l].push(l==="servicios"?{id:"",nombre:"",precio:0,duracion:30,alias:""}:l==="faqs"?{p:"",r:""}:{id:"",nombre:""}); pintarConfigConservando(); return marcarCambios(); }
+  if(el.dataset.quitar){ const l=el.dataset.quitar; if((l==="servicios"||l==="recursos")&&b[l].length<2) return; b[l].splice(Number(el.dataset.i),1); pintarConfigConservando(); return marcarCambios(); }
+  if(el.dataset.act==="descartar"){ S.borrador=null; aplicarMarca(S.ficha.color); return pintarConfig(); }
+  if(el.dataset.act==="guardar"){
+    const nota=document.getElementById("cf-nota");
+    const f=limpio(b);
+    f.recursos=f.recursos.filter(r=>r.nombre.trim()); f.servicios=f.servicios.filter(s=>s.nombre.trim()); f.faqs=f.faqs.filter(q=>q.p.trim()&&q.r.trim());
+    if(!f.nombre.trim()||!f.recursos.length||!f.servicios.length){ nota.textContent="Faltan el nombre, al menos un "+f.recurso+" y al menos un servicio."; nota.className="nota mal"; return; }
+    if(!Object.values(f.horarios).some(Boolean)){ nota.textContent="Marcá al menos un día abierto."; nota.className="nota mal"; return; }
+    const sn=senaDe(f), pct=sn.tipo==="porcentaje", monto=Number(sn.monto);
+    if(!isFinite(monto)||monto<0){ nota.textContent="La seña tiene que ser un número, de 0 para arriba."; nota.className="nota mal"; return; }
+    if(pct&&monto>100){ nota.textContent="El porcentaje de la seña no puede pasar de 100."; nota.className="nota mal"; return; }
+    if(sn.activa&&monto>0&&!String(sn.alias).trim()){ nota.textContent="Cargá el alias o usuario donde recibís la seña."; nota.className="nota mal"; return; }
+    f.sena={activa:!!sn.activa,obligatoria:!!sn.obligatoria,tipo:pct?"porcentaje":"fijo",monto:Math.round(monto),alias:String(sn.alias).trim(),nota:String(sn.nota).trim()};
+    f.recordatorioHoras=Number(f.recordatorioHoras)||24; f.pedirConfirmacion=f.pedirConfirmacion!==false;
+    // los ids se conservan si ya existían; los nuevos salen del nombre
+    const usados=new Set();
+    [f.recursos,f.servicios].forEach(lista=>{ usados.clear(); lista.forEach(x=>{ let id=x.id||slug(x.nombre),k=id,i=2; while(usados.has(k)) k=id+"-"+(i++); x.id=k; usados.add(k); }); });
+    f.servicios.forEach(s=>{ s.precio=Math.max(0,Number(s.precio)||0); s.duracion=Math.max(5,Number(s.duracion)||30); });
+    f.ejemplo=false;
+    try{ await guardarFicha(f); S.borrador=null; pintarConfig(); const n=document.getElementById("cf-nota"); n.textContent="Guardado. El chat ya responde con esta ficha."; n.className="nota ok"; }
+    catch(err){ nota.textContent="No se pudo guardar: solo quien administra esta página puede cambiar la ficha."; nota.className="nota mal"; }
+  }
+});
+function marcarCambios(){ const n=document.getElementById("cf-nota"); if(n){ n.textContent="Hay cambios sin guardar"; n.className="nota"; } }
+
+/* =====================================================================
+   MARCA, CARAS Y ARRANQUE
+   ===================================================================== */
+function aplicarMarca(color){
+  const c=/^#[0-9a-f]{6}$/i.test(color||"")?color:"#A86D21";
+  const r=parseInt(c.slice(1,3),16)/255,g=parseInt(c.slice(3,5),16)/255,b=parseInt(c.slice(5,7),16)/255;
+  const L=x=>x<=.03928?x/12.92:Math.pow((x+.055)/1.055,2.4); const lum=.2126*L(r)+.7152*L(g)+.0722*L(b);
+  const root=document.documentElement.style; root.setProperty("--brand",c); root.setProperty("--brand-ink",lum>.42?"#1B1915":"#FFFFFF");
+}
+let fichaClave="";
+function pintarTodo(desdeBase){
+  const f=S.ficha;
+  aplicarMarca(S.borrador?S.borrador.color:f.color);
+  document.getElementById("nomChat").textContent=f.nombre;
+  const av=document.getElementById("avatar");
+  if(f.logo){ av.innerHTML="<img src='"+esc(f.logo)+"' alt='"+esc(f.nombre)+"'>"; }
+  else{ av.textContent=(f.nombre.replace(/^(barber[ií]a|estudio|taller|bodeg[oó]n|nail bar|p[aá]del club)\s+/i,"").trim()[0]||"·").toUpperCase(); }
+  document.getElementById("cintaChat").textContent=f.ejemplo?"Demostración · "+f.rubro+" de ejemplo":"Demostración";
+  pintarEstadoChat();
+  const clave=JSON.stringify(f);
+  if(clave!==fichaClave){ const antes=fichaClave; fichaClave=clave; if(!antes||!flujo) saludo(); }
+  if(S.cara==="local") pintarLocal();
+  if(S.cara==="configurar" && !S.borrador) pintarConfig();
+}
+const LEYENDAS={cliente:"Lo que ve quien escanea el QR: pregunta y saca turno solo.",
+  local:"Lo que ve el local en su celular: la agenda, quién vino y la caja del día.",
+  configurar:"El alta: los datos del local. Lo cargás vos en la visita, en 5 minutos."};
+function irA(cara){
+  S.cara=cara;
+  document.querySelectorAll(".seg button").forEach(b=>b.setAttribute("aria-selected",b.dataset.cara===cara));
+  ["cliente","local","configurar"].forEach(c=>document.getElementById("v-"+c).hidden=c!==cara);
+  document.getElementById("marco").classList.toggle("chat",cara==="cliente");
+  document.getElementById("leyenda").textContent=LEYENDAS[cara];
+  if(cara==="local"){ pintarLocal(); }
+  if(cara==="configurar"){ pintarConfig(); }
+  if(cara!=="configurar" && S.borrador){ /* cambios sin guardar quedan en el borrador */ aplicarMarca(S.ficha.color); }
+  if(cara==="configurar" && S.borrador) aplicarMarca(S.borrador.color);
+}
+document.querySelectorAll(".seg button").forEach(b=>b.addEventListener("click",()=>irA(b.dataset.cara)));
+const h0=location.hash.replace("#",""); if(["cliente","local","configurar"].includes(h0)) irA(h0);
+iniciarDatos();
+</script>
+
+</body></html>
