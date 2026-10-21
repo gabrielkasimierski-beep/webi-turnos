@@ -56,7 +56,7 @@ export function diasAbiertos(f: Ficha, ahora: Date = new Date()) {
   return out;
 }
 export function ocupado(ocup: Ocupacion[], recursoId: string, fecha: string, ini: number, dur: number, excluir?: string) {
-  return ocup.some((t) => t.id !== excluir && t.recursoId === recursoId && t.fecha === fecha && t.estado !== "cancelado" &&
+  return ocup.some((t) => (excluir === undefined || t.id !== excluir) && t.recursoId === recursoId && t.fecha === fecha && t.estado !== "cancelado" &&
     aMin(t.hora) < ini + dur && ini < aMin(t.hora) + (t.dur || 30));
 }
 export function libres(f: Ficha, ocup: Ocupacion[], fecha: string, servicio: Servicio | undefined, recursoId: string | null | undefined, ahora: Date = new Date()) {

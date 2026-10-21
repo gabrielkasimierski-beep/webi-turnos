@@ -19,7 +19,9 @@ async function crear(): Promise<Db> {
   const { PGlite } = await import("@electric-sql/pglite");
   const { drizzle } = await import("drizzle-orm/pglite");
   const { migrate } = await import("drizzle-orm/pglite/migrator");
-  const cliente = new PGlite(process.env.PGLITE_DIR || ".data/pglite");
+  const dir = process.env.PGLITE_DIR || ".data/pglite";
+  (await import("node:fs")).mkdirSync(dir, { recursive: true });
+  const cliente = new PGlite(dir);
   const db = drizzle(cliente, { schema });
   await migrate(db, { migrationsFolder: "./drizzle" });
   // en desarrollo local se precargan los locales de ejemplo para poder probar de punta a punta
@@ -32,5 +34,5 @@ async function crear(): Promise<Db> {
   return db as unknown as Db;
 }
 
-export const getDb = () => (g.__db ??= crear());
+export const getDb = () => (g.__db ??= crear().catch((e) => { g.__db = undefined; throw e; }));
 export { schema };

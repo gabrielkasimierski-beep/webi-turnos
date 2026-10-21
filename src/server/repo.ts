@@ -198,9 +198,9 @@ export async function cambiarTurno(localId: string, id: string, c: Cambios) {
   if (!Object.keys(set).length) return false;
   const db = await getDb();
   try {
-    await db.update(turnos).set(set).where(and(eq(turnos.id, id), eq(turnos.localId, localId)));
+    const filas = await db.update(turnos).set(set).where(and(eq(turnos.id, id), eq(turnos.localId, localId))).returning({ id: turnos.id });
+    return filas.length > 0; // 0 filas = el turno no es de este local
   } catch { return false; } // p. ej. volver a pendiente un hueco que ya se ocupó
-  return true;
 }
 
 /* ---------- lo que hace el cliente (identificado por teléfono) ---------- */
