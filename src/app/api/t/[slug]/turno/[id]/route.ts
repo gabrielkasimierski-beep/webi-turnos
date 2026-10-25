@@ -13,6 +13,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
   if (!b) return error("Pedido inválido.");
   const pal = loc.ficha.palabra || "turno";
 
+  const iconoUrl = `/api/icono?slug=${encodeURIComponent(loc.ficha.slug)}&s=192`;
+
   if (b.accion === "comprobante") {
     if (!rateLimit("comp:" + ipDe(req), 8, 60_000)) {
       return error("Demasiados intentos seguidos. Esperá un minuto y probá de nuevo.", 429);
@@ -25,6 +27,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
           body: `Un cliente subió el comprobante verificado para su ${pal}.`,
           tag: "sena-" + id,
           url: "/panel",
+          icon: iconoUrl,
         }),
         new Promise((res) => setTimeout(res, 2000)),
       ]);
@@ -44,6 +47,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
             : `Un cliente canceló su ${pal} y liberó el horario en la agenda.`,
         tag: b.accion + "-" + id,
         url: "/panel",
+        icon: iconoUrl,
       }),
       new Promise((res) => setTimeout(res, 2000)),
     ]);

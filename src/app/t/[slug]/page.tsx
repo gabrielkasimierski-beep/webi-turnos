@@ -9,7 +9,22 @@ type P = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: P): Promise<Metadata> {
   const loc = await localPorSlug((await params).slug);
-  return { title: loc ? loc.ficha.nombre + " · " + (loc.ficha.palabra === "reserva" ? "Reservas" : "Turnos") : "Local no encontrado" };
+  if (!loc) return { title: "Local no encontrado" };
+  const s = encodeURIComponent(loc.ficha.slug);
+  const iconoUrl = `/api/icono?slug=${s}&s=512`;
+  return {
+    title: `${loc.ficha.nombre} · ${loc.ficha.palabra === "reserva" ? "Reservas" : "Turnos"}`,
+    manifest: `/api/manifest?slug=${s}`,
+    icons: {
+      icon: iconoUrl,
+      apple: iconoUrl,
+    },
+    appleWebApp: {
+      capable: true,
+      title: loc.ficha.nombre,
+      statusBarStyle: "default",
+    },
+  };
 }
 
 /** La cara Cliente: lo que se abre al escanear el QR del local. */

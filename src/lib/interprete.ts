@@ -199,12 +199,17 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
     e.proximaSemana = true;
   }
 
-  // 3) Servicio: nombre o cualquiera de sus alias ("también le dicen")
+  // 3) Servicio: nombre o cualquiera de sus alias ("también le dicen") + equivalencias de duración ("hora y media" -> 90, "una hora" -> 60)
+  const tSrv = tPos
+    .replace(/ (una|1) hora y media | hora y media /g, " 90 min ")
+    .replace(/ (una|1) hora /g, " 60 min ")
+    .replace(/ (dos|2) horas /g, " 120 min ");
+  const toksSrv = tSrv.trim().split(/\s+/).filter(Boolean);
   let mejorSrv = 0;
   f.servicios.forEach((s) => {
     [s.nombre].concat(String(s.alias || "").split(",")).forEach((c) => {
       if (!c.trim()) return;
-      const n = calza(toksPos, c);
+      const n = calza(toksSrv, c);
       if (n > mejorSrv) {
         mejorSrv = n;
         e.servicioId = s.id;
@@ -212,12 +217,12 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
     });
   });
 
-  // 4) Persona o recurso (profesional, cancha, mesa, box)
+  // 4) Persona o recurso (profesional, cancha, mesa, box, "cancha 2", "la 2")
   if (
     hayPos(
       " me da igual ", " cualquiera ", " quien sea ", " el que haya ", " la que haya ",
       " el que este ", " la que este ", " indistinto ", " da igual ", " sin preferencia ",
-      " el primero que pueda ", " quien tenga lugar ",
+      " el primero que pueda ", " quien tenga lugar ", " el primero libre ",
     )
   ) {
     e.recursoId = null;
@@ -230,12 +235,24 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
   ) {
     e.otroRecurso = true;
   } else {
+    const tRec = tPos
+      .replace(/\buno\b/g, "1")
+      .replace(/\bdos\b/g, "2")
+      .replace(/\btres\b/g, "3")
+      .replace(/\bcuatro\b/g, "4")
+      .replace(/\bcinco\b/g, "5");
+    const toksRec = tRec.trim().split(/\s+/).filter(Boolean);
     let mejorRec = 0;
     f.recursos.forEach((r) => {
-      const n = calza(toksPos, r.nombre);
+      const n = calza(toksRec, r.nombre);
       const rn = palabras(r.nombre);
-      const corto = rn.some((p) => p.length >= 2 && toksPos.some((w) => w === p || (p.length >= 3 && w.startsWith(p))));
-      const score = Math.max(n, corto ? 11 : 0);
+      const numRec = rn.find((p) => /^\d+$/.test(p));
+      const mencionaNumRec =
+        numRec &&
+        (new RegExp(` (?:cancha|mesa|box|sala|consultorio|la|el) ${numRec} `).test(tRec) ||
+          (ctx?.espera === "recurso" && new RegExp(`^ (?:la |el |numero )?${numRec} $`).test(tRec)));
+      const corto = rn.some((p) => p.length >= 2 && toksRec.some((w) => w === p || (p.length >= 3 && w.startsWith(p))));
+      const score = Math.max(n, mencionaNumRec ? 22 : 0, corto ? 11 : 0);
       if (score > mejorRec) {
         mejorRec = score;
         e.recursoId = r.id;
@@ -321,7 +338,7 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
     h = +m[1]; mi = +m[2];
   } else if (
     (m = tPos.match(
-      new RegExp(` (a las|las|tipo|como a las|a eso de las|cerca de las|despues de las|desde las|a partir de las|antes de las|hasta las) (${PAT_HORA})( y media| y cuarto| y treinta| y quince| menos cuarto)? `),
+      new RegExp(` (salgo a las|salgo de trabajar a las|me desocupo a las|me libero a las|recien puedo a las|a las|las|tipo|como a las|a eso de las|cerca de las|despues de las|desde las|a partir de las|antes de las|hasta las) (${PAT_HORA})( y media| y cuarto| y treinta| y quince| menos cuarto)? `),
     ))
   ) {
     h = NUM_PAL[m[2]] || +m[2];
@@ -329,7 +346,7 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
       if (/menos cuarto/.test(m[3])) { h = (h + 23) % 24; mi = 45; }
       else mi = /media|treinta/.test(m[3]) ? 30 : 15;
     }
-    if (/despues|desde|partir/.test(m[1])) tipo = "desde";
+    if (/despues|desde|partir|salgo|desocupo|libero|recien/.test(m[1])) tipo = "desde";
     if (/antes|hasta/.test(m[1])) tipo = "hasta";
   } else if ((m = tPos.match(/ (\d{1,2}|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce) y (media|cuarto|treinta|quince) /))) {
     h = NUM_PAL[m[1]] || +m[1];
@@ -356,8 +373,11 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
   const esRechazo =
     !esPreguntaNo &&
     !mPivot &&
-    (hay(" no puedo ", " no me sirve ", " no me queda ", " no llego ", " imposible ", " descart", " no quiero ") ||
-      / no (hoy|manana|pasado|el |este |a la |a las |con |en )/.test(t) ||
+    (hay(
+      " no puedo ", " no me sirve ", " no me queda ", " no llego ", " imposible ", " descart", " no quiero ",
+      " se me complica ", " estoy ocupado ", " estoy ocupada ", " no estoy ", " trabajo ", " curso ",
+    ) ||
+      / no (hoy|manana|pasado|el |este |a la |a las |con |en |antes |despues )/.test(t) ||
       / (hoy|manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|finde|tarde|noche) no /.test(t));
 
   if (esRechazo) {
@@ -372,7 +392,15 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
       e.negacion = true;
     }
     if (e.franja) {
-      if (e.franja[0] === 0) {
+      if (tipo === "hasta" && e.franja[1] < 24 * 60) {
+        const corte = e.franja[1];
+        e.franja = [corte, 24 * 60, "desde las " + aHora(corte)];
+        e.masTarde = true;
+      } else if (tipo === "desde" && e.franja[0] > 0) {
+        const corte = e.franja[0];
+        e.franja = [0, corte, "antes de las " + aHora(corte)];
+        e.masTemprano = true;
+      } else if (e.franja[0] === 0) {
         e.franja = [13 * 60, 24 * 60, "a la tarde"];
         e.masTarde = true;
       } else {
@@ -434,6 +462,10 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
     ) || e.loAntesPosible || e.masTarde || e.masTemprano || e.otroDia || e.diaSiguiente || e.proximaSemana || e.otroRecurso;
   e.ganas = hay(" quiero ", " queria ", " quisiera ", " me gustaria ", " necesito ", " quiero hacerme ", " vengo a ", " busco ", " para hacerme ");
 
+  const tieneFiltroAgenda = Boolean(
+    e.fecha || e.hora || e.franja || e.masTarde || e.masTemprano || e.otroDia || e.diaSiguiente || e.proximaSemana || e.otroRecurso || e.recursoId !== undefined,
+  );
+
   if (
     hay(
       " comprobante ", " ya transferi ", " ya pague ", " te pase la sena ", " mande la sena ",
@@ -468,21 +500,24 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
     ) && !e.recursoId
   ) {
     e.info = "recursos";
-  } else if (pideProximo && !e.servicioId && !e.hora) {
+  } else if (pideProximo && !e.servicioId && !tieneFiltroAgenda) {
     e.info = "proximo";
-  } else if (hay(" horario", " abren", " cierran", " abierto", " atienden ", " trabajan ", " que dias ", " hasta que hora ", " a que hora abren ") && !e.otroDia) {
+  } else if (
+    hay(" en que horario ", " que horario tienen ", " abren", " cierran", " abierto", " que dias abren ", " hasta que hora ", " a que hora abren ", " a que hora cierran ") &&
+    !tieneFiltroAgenda
+  ) {
     e.info = "horario";
   } else if (hay(" donde ", " direccion", " ubicacion", " como llego", " quedan ", " estan ubicados ", " zona ", " calle ", " mapa ")) {
     e.info = "donde";
-  } else if (hay(" servicios ", " que hacen ", " que ofrecen ", " que tienen ", " que trabajos ", " recomend", " cual me conviene ")) {
+  } else if (hay(" servicios ", " que hacen ", " que ofrecen ", " que tienen ", " que trabajos ", " recomend", " cual me conviene ") && !tieneFiltroAgenda && !e.servicioId) {
     e.info = "servicios";
   } else if (hay(" hablar con ", " una persona ", " humano ", " whatsapp ", " telefono ", " instagram ", " el dueno ", " la duena ", " encargado ", " llamar ")) {
     e.info = "contacto";
   } else if (f.fidelidad?.activa && hay(" premio", " puntos ", " mis visitas ", " fidelidad ", " descuento por ", " promo ")) {
     e.info = "fidelidad";
-  } else if (hay(" gracias ", " genial ", " perfecto ", " barbaro ", " buenisimo ", " muchas gracias ", " mil gracias ")) {
+  } else if (hay(" gracias ", " genial ", " perfecto ", " barbaro ", " buenisimo ", " muchas gracias ", " mil gracias ") && !tieneFiltroAgenda && !e.servicioId && !e.turno && !e.ganas) {
     e.info = "gracias";
-  } else if (hay(" hola ", " buenas ", " buen dia ", " buenas tardes ", " buenas noches ", " que tal ", " como va ", " todo bien ")) {
+  } else if (hay(" hola ", " buenas ", " buen dia ", " buenas tardes ", " buenas noches ", " que tal ", " como va ", " todo bien ") && !tieneFiltroAgenda && !e.servicioId && !e.turno && !e.ganas) {
     e.info = "hola";
   }
 

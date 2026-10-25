@@ -32,6 +32,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
         body: `${r.t.nombre || "Cliente"} · ${etiquetaDia(r.t.fecha)} a las ${r.t.hora} h (${r.t.servicioNombre} · ${r.t.recursoNombre})${senaTxt}`,
         tag: "turno-" + r.t.id,
         url: "/panel",
+        icon: `/api/icono?slug=${encodeURIComponent(loc.ficha.slug)}&s=192`,
       }),
       new Promise((res) => setTimeout(res, 2000)),
     ]);

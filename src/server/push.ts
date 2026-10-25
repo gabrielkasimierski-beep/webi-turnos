@@ -56,7 +56,7 @@ export async function guardarSuscripcionPush(localId: string, sub: webpush.PushS
 
 export async function enviarPushLocal(
   localId: string,
-  payload: { title: string; body: string; tag?: string; url?: string },
+  payload: { title: string; body: string; tag?: string; url?: string; icon?: string },
 ) {
   try {
     asegurarVapid();

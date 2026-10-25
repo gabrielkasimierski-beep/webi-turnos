@@ -81,10 +81,47 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
   const [propuesta, setPropuesta] = useState<{ p: Flujo; srv: Servicio } | null>(null);
   const [escribiendo, setEscribiendo] = useState(0);
   const [texto, setTexto] = useState("");
+  const [yaEsApp, setYaEsApp] = useState(false);
+  const [guiaApp, setGuiaApp] = useState<null | "ios" | "inapp" | "android">(null);
+  const installPromptRef = useRef<{ prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> } | null>(null);
   const hiloRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const senaPendRef = useRef<{ t: Turno; tel: string; reintentar: () => void } | null>(null);
   const f = fichaInicial;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.matchMedia("(display-mode: standalone)").matches || (navigator as unknown as { standalone?: boolean }).standalone) {
+      setYaEsApp(true);
+    }
+    const onPrompt = (e: Event) => {
+      e.preventDefault();
+      installPromptRef.current = e as unknown as { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
+    };
+    const onInstalled = () => setYaEsApp(true);
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  async function instalarComoApp() {
+    if (installPromptRef.current) {
+      try {
+        await installPromptRef.current.prompt();
+        const c = await installPromptRef.current.userChoice;
+        if (c.outcome === "accepted") setYaEsApp(true);
+        installPromptRef.current = null;
+        return;
+      } catch { /* fallback a guía */ }
+    }
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    const esInApp = /Instagram|FBAN|FBAV|WhatsApp/i.test(ua);
+    const esIOS = /iPad|iPhone|iPod/i.test(ua);
+    setGuiaApp(esInApp ? "inapp" : esIOS ? "ios" : "android");
+  }
 
   useEffect(() => { const h = hiloRef.current; if (h) h.scrollTop = h.scrollHeight; }, [msgs, chips, propuesta, escribiendo]);
 
@@ -574,6 +611,12 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
     // Si en medio de elegir horario o día el cliente rechaza las opciones ("no me sirve", "ninguno de esos") sin dar otro dato
     if (fl && e.negacion && !datos && !e.info) {
       if (fl.espera === "hora" && fl.fecha) {
+        if (fl.franja) {
+          fl.franja = null;
+          fl.pagHora = 0;
+          bot(["Dale, te muestro todos los horarios libres de ese día:"]);
+          return setTimeout(() => avanzar(), 500);
+        }
         fl.fechaDescartada = fl.fecha;
         fl.fecha = null;
         fl.hora = null;
@@ -584,11 +627,18 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
       return cancelarFlujo();
     }
 
-    // Si hace una pregunta informativa en medio del flujo o fuera de él, la respondemos y si estaba reservando retomamos donde quedó
+    // Si hace una pregunta informativa en medio del flujo o fuera de él, la respondemos y si también dio datos de turno los guardamos
     if (e.info === "mis_turnos" || e.info === "comprobante" || e.info === "proximo" || e.info === "recursos") {
+      if (fl && datos) aplicar(e);
       return responderInfo(e.info, e, fl ? () => setTimeout(() => avanzar(), 900) : null);
     }
     if (e.info && !(e.turno && (e.fecha || e.hora || e.franja))) {
+      if (datos) {
+        const nuevoFlujo = fl || { servicioId: e.servicioId || R.current.ultimoSrvId || null };
+        setFlujo(nuevoFlujo);
+        aplicar(e);
+        return responderInfo(e.info, e, () => setTimeout(() => avanzar(), 900));
+      }
       return responderInfo(e.info, e, fl ? () => setTimeout(() => avanzar(), 900) : null);
     }
 
@@ -605,7 +655,13 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
     }
 
     if (fl) {
-      bot(["Para seguir con " + elTurno() + ", elegí una de las opciones o decime día y horario (por ejemplo, “el viernes a las 5” o “más tarde”):"]);
+      if (fl.espera === "tel") {
+        return bot(["Pasame tu número de celular con código de área (por ejemplo: <b>11 5555 1234</b>) para dejarte anotado, o decime si preferís cambiar el día u horario:"]);
+      }
+      if (fl.espera === "nombre") {
+        return bot(["Decime tu nombre y apellido (por ejemplo: <b>Juan Pérez</b>) para anotarte, o avisame si preferís cambiar el día u horario:"]);
+      }
+      bot(["Para seguir con " + elTurno() + ", elegí una de las opciones o decime día y horario (por ejemplo, “el viernes a las 18” o “más tarde”):"]);
       return setTimeout(() => avanzar(), 750);
     }
 
@@ -1054,6 +1110,8 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
       const visibles = hs.slice(pag * TAM_PAG, (pag + 1) * TAM_PAG);
       const hayMasTemprano = pag > 0;
       const hayMasTarde = (pag + 1) * TAM_PAG < hs.length;
+      const hayTarde = !fl.franja && todos.some((h) => aMin(h.hora) >= 13 * 60 && aMin(h.hora) < 19 * 60);
+      const hayNoche = !fl.franja && todos.some((h) => aMin(h.hora) >= 18 * 60 + 30);
       const tituloHoras =
         pag > 0
           ? `Estos son los horarios de más tarde ${etiquetaDia(fl.fecha).toLowerCase()}${nomRec ? " " + esc(prepRec(nomRec)) : ""}:`
@@ -1065,7 +1123,10 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
           ...(hayMasTemprano ? [{ texto: "← Más temprano", hacer: () => { fl.pagHora = pag - 1; avanzar(); } } as Chip] : []),
           ...visibles.map((h) => ({ texto: h.hora, hacer: () => { fl.hora = h.hora; avanzar(); } })),
           ...(hayMasTarde ? [{ texto: "Más tarde →", lleno: true, hacer: () => { fl.pagHora = pag + 1; avanzar(); } } as Chip] : []),
-          { texto: "Otro día", hacer: () => { fl.fecha = null; fl.hora = null; fl.pagHora = 0; avanzar(); } },
+          ...(hs.length > TAM_PAG && hayTarde ? [{ texto: "☀️ Tarde", hacer: () => { fl.franja = [13 * 60, 19 * 60 + 30, "a la tarde"]; fl.pagHora = 0; avanzar(); } } as Chip] : []),
+          ...(hs.length > TAM_PAG && hayNoche ? [{ texto: "🌙 Noche", hacer: () => { fl.franja = [18 * 60 + 30, 24 * 60, "a la noche"]; fl.pagHora = 0; avanzar(); } } as Chip] : []),
+          ...(fl.franja ? [{ texto: "Ver todo el día", hacer: () => { fl.franja = null; fl.pagHora = 0; avanzar(); } } as Chip] : []),
+          { texto: "Otro día", hacer: () => { fl.fechaDescartada = fl.fecha; fl.fecha = null; fl.hora = null; fl.pagHora = 0; avanzar(); } },
         ],
       );
     }
@@ -1257,13 +1318,71 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
   return (
     <div className="marco chat" style={{ flex: 1 }}>
       <section className="vista">
-        <div className="tope">
-          <div className="avatar">{f.logo ? <img src={f.logo} alt={f.nombre} /> : inicial}</div>
-          <div className="quien">
-            <div className="nom">{f.nombre}</div>
-            <div className="estado"><span className="punto" /><span>Asesor virtual · responde al instante</span></div>
+        <div className="tope" style={{ justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+            <div className="avatar">
+              <img src={f.logo || `/api/icono?slug=${encodeURIComponent(f.slug)}&s=192`} alt={f.nombre} />
+            </div>
+            <div className="quien">
+              <div className="nom">{f.nombre}</div>
+              <div className="estado"><span className="punto" /><span>Asesor virtual · responde al instante</span></div>
+            </div>
           </div>
+          {!yaEsApp && (
+            <button
+              type="button"
+              onClick={instalarComoApp}
+              style={{
+                background: "var(--brand)",
+                color: "#fff",
+                border: "none",
+                borderRadius: 999,
+                padding: "7px 12px",
+                fontSize: ".76rem",
+                fontWeight: 700,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                boxShadow: "0 2px 8px rgba(0,0,0,.15)",
+              }}
+            >
+              📲 Instalar App
+            </button>
+          )}
         </div>
+        {guiaApp && (
+          <div
+            style={{
+              background: "var(--surface)",
+              borderBottom: "1.5px solid var(--brand)",
+              padding: "12px 16px",
+              fontSize: ".86rem",
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <b>📲 Dejá {f.nombre} como App en tu celular</b>
+              <button type="button" onClick={() => setGuiaApp(null)} style={{ background: "none", border: "none", fontSize: "1.1rem", cursor: "pointer", color: "inherit" }}>✕</button>
+            </div>
+            {guiaApp === "inapp" ? (
+              <span>
+                1️⃣ Tocá los <b>3 puntitos (⋯)</b> abajo a la derecha y elegí <b>“Abrir en el navegador”</b> (Safari o Chrome).<br />
+                2️⃣ Ahí tocá <b>📲 Instalar App</b> (o <b>Compartir ⬆️ → Agregar a inicio</b>) y te queda con el ícono de <b>{f.nombre}</b>.
+              </span>
+            ) : guiaApp === "ios" ? (
+              <span>
+                1️⃣ Tocá el botón <b>Compartir (⬆️)</b> en la barra de abajo de Safari.<br />
+                2️⃣ Elegí <b>“Agregar a pantalla de inicio” (➕)</b> y te queda instalada con el logo de <b>{f.nombre}</b>.
+              </span>
+            ) : (
+              <span>
+                1️⃣ Tocá el menú de <b>3 puntitos (⋮)</b> arriba a la derecha en tu navegador.<br />
+                2️⃣ Tocá <b>“Instalar aplicación”</b> o <b>“Agregar a la pantalla principal”</b>.
+              </span>
+            )}
+          </div>
+        )}
         <div className="cinta" style={{ display: "flex", flexWrap: "wrap", gap: "8px 14px", alignItems: "center", justifyContent: "space-between" }}>
           {f.direccion && <span>📍 {f.direccion}</span>}
           <span style={{ display: "inline-flex", gap: 10, flexWrap: "wrap", fontWeight: 600 }}>

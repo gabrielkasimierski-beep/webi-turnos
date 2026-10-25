@@ -15,12 +15,24 @@ function estadoVisible(t: Turno) {
   return t.estado as string;
 }
 
+let audioCtxGlobal: AudioContext | null = null;
+function obtenerAudioCtx(): AudioContext | null {
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return null;
+    if (!audioCtxGlobal) audioCtxGlobal = new Ctx();
+    if (audioCtxGlobal.state === "suspended") audioCtxGlobal.resume().catch(() => {});
+    return audioCtxGlobal;
+  } catch {
+    return null;
+  }
+}
+
 /** Sonido sintético limpio (Web Audio API, sin archivos externos) para avisar nuevo turno o seña verificada. */
 function sonarAviso(tipo: "turno" | "sena" = "turno") {
   try {
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
+    const ctx = obtenerAudioCtx();
+    if (!ctx) return;
     const notas = tipo === "sena" ? [587.33, 783.99, 1046.5] : [523.25, 659.25];
     notas.forEach((freq, i) => {
       const osc = ctx.createOscillator();
@@ -28,12 +40,12 @@ function sonarAviso(tipo: "turno" | "sena" = "turno") {
       osc.type = "sine";
       osc.frequency.value = freq;
       gain.gain.setValueAtTime(0.001, ctx.currentTime + i * 0.13);
-      gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + i * 0.13 + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.13 + 0.24);
+      gain.gain.exponentialRampToValueAtTime(0.24, ctx.currentTime + i * 0.13 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.13 + 0.26);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start(ctx.currentTime + i * 0.13);
-      osc.stop(ctx.currentTime + i * 0.13 + 0.25);
+      osc.stop(ctx.currentTime + i * 0.13 + 0.27);
     });
   } catch { /* audio bloqueado hasta interacción */ }
 }
@@ -51,16 +63,25 @@ function urlBase64ToUint8Array(base64String: string) {
 async function suscribirWebPush(enviarTest: boolean): Promise<boolean> {
   try {
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
-    const reg = await navigator.serviceWorker.register("/sw.js");
-    await navigator.serviceWorker.ready;
+    await navigator.serviceWorker.register("/sw.js");
+    const reg = await navigator.serviceWorker.ready;
     const rKey = await fetch("/api/panel/push", { cache: "no-store" }).then((x) => x.json());
     if (!rKey?.ok || !rKey.publicKey) return false;
     let sub = await reg.pushManager.getSubscription();
     if (!sub) {
-      sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(rKey.publicKey),
-      });
+      try {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(rKey.publicKey),
+        });
+      } catch {
+        const old = await reg.pushManager.getSubscription();
+        if (old) await old.unsubscribe().catch(() => {});
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(rKey.publicKey),
+        });
+      }
     }
     const rSave = await fetch("/api/panel/push", {
       method: "POST",
@@ -124,11 +145,27 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
   const [fid, setFid] = useState<ResumenCliente | null>(null);
   const [permisoPush, setPermisoPush] = useState<string>("default");
   const [avisoVivo, setAvisoVivo] = useState<string | null>(null);
+  const [yaEsApp, setYaEsApp] = useState(false);
+  const [guiaApp, setGuiaApp] = useState<null | "ios" | "inapp" | "android">(null);
+  const installPromptRef = useRef<{ prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> } | null>(null);
   const prevTurnosRef = useRef<Map<string, Turno> | null>(null);
   const palabra = ficha.palabra || "turno";
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const desbloquearAudio = () => obtenerAudioCtx();
+    window.addEventListener("pointerdown", desbloquearAudio, { once: true });
+    if (window.matchMedia("(display-mode: standalone)").matches || (navigator as unknown as { standalone?: boolean }).standalone) {
+      setYaEsApp(true);
+    }
+    const onPrompt = (e: Event) => {
+      e.preventDefault();
+      installPromptRef.current = e as unknown as { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
+    };
+    const onInstalled = () => setYaEsApp(true);
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+
     if ("Notification" in window) {
       setPermisoPush(Notification.permission);
       if (Notification.permission === "granted") {
@@ -137,33 +174,52 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
     } else if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
+    return () => {
+      window.removeEventListener("pointerdown", desbloquearAudio);
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
   }, [ficha.slug]);
 
+  async function instalarComoApp() {
+    if (installPromptRef.current) {
+      try {
+        await installPromptRef.current.prompt();
+        const c = await installPromptRef.current.userChoice;
+        if (c.outcome === "accepted") setYaEsApp(true);
+        installPromptRef.current = null;
+        return;
+      } catch { /* fallback a guía */ }
+    }
+    const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+    const esInApp = /Instagram|FBAN|FBAV|WhatsApp/i.test(ua);
+    const esIOS = /iPad|iPhone|iPod/i.test(ua);
+    setGuiaApp(esInApp ? "inapp" : esIOS ? "ios" : "android");
+  }
+
   async function activarNotificaciones() {
+    sonarAviso("sena");
     if (typeof window === "undefined" || !("Notification" in window)) {
       const esIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (esIOS) setGuiaApp("ios");
       setAvisoVivo(
         esIOS
-          ? "📲 En iPhone: tocá el botón Compartir de Safari → 'Agregar a pantalla de inicio' y abrí el panel desde ahí para recibir notificaciones."
+          ? "📲 En iPhone: primero instalá el panel como App (tocá '📲 Instalar App' arriba) y abrilo desde tu pantalla de inicio para recibir notificaciones."
           : "Este navegador no soporta notificaciones nativas, pero el aviso sonoro en pantalla está activo.",
       );
-      sonarAviso("sena");
       return;
     }
     try {
       const p = await Notification.requestPermission();
       setPermisoPush(p);
       if (p === "granted") {
-        sonarAviso("sena");
-        const pushOk = await suscribirWebPush(true);
-        if (!pushOk) {
-          await dispararPushLocal(
-            "🔔 Notificaciones activadas · " + ficha.nombre,
-            "Te vamos a avisar con sonido y notificación apenas entre un " + palabra + " o un comprobante de seña.",
-            "webi-test-" + Date.now(),
-          );
-        }
-        setAvisoVivo(`¡Listo! Este celular ya está vinculado a ${ficha.nombre} para recibir notificaciones en segundo plano.`);
+        await dispararPushLocal(
+          "🔔 Notificaciones activadas · " + ficha.nombre,
+          "Te vamos a avisar con sonido y notificación apenas entre un " + palabra + " o un comprobante de seña.",
+          "webi-test-local-" + Date.now(),
+        );
+        await suscribirWebPush(true);
+        setAvisoVivo(`¡Listo! Este celular ya está vinculado a ${ficha.nombre} para recibir notificaciones con sonido aún en segundo plano.`);
       } else {
         setAvisoVivo("Permiso bloqueado en el navegador. Habilitalo desde el candadito de la barra de direcciones.");
       }
@@ -298,8 +354,25 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
   return (
     <div className="hoja">
       <div className="cab">
-        <div><h2>{ficha.nombre}</h2><p className="sub">Agenda del local · {ficha.rubro}</p></div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <img
+            src={ficha.logo || `/api/icono?slug=${encodeURIComponent(ficha.slug)}&s=192`}
+            alt={ficha.nombre}
+            style={{ width: 44, height: 44, borderRadius: 11, objectFit: "cover", flexShrink: 0 }}
+          />
+          <div><h2>{ficha.nombre}</h2><p className="sub">Agenda del local · {ficha.rubro}</p></div>
+        </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {!yaEsApp && (
+            <button
+              type="button"
+              className="btn pri"
+              style={{ fontSize: ".8rem", padding: "6px 11px" }}
+              onClick={instalarComoApp}
+            >
+              📲 Instalar App
+            </button>
+          )}
           <button
             type="button"
             className={"btn" + (permisoPush === "granted" ? "" : " pri")}
@@ -311,6 +384,42 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
           <div className="modo"><span className={"punto" + (cargado ? "" : " no")} />{cargado ? "En vivo" : "Cargando…"}</div>
         </div>
       </div>
+      {guiaApp && (
+        <div
+          style={{
+            background: "var(--surface)",
+            border: "1.5px solid var(--brand)",
+            borderRadius: 12,
+            padding: "12px 14px",
+            marginBottom: 12,
+            fontSize: ".88rem",
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <b>📲 Dejá el panel de {ficha.nombre} como App en tu celular</b>
+            <button type="button" onClick={() => setGuiaApp(null)} style={{ background: "none", border: "none", fontSize: "1.1rem", cursor: "pointer", color: "inherit" }}>✕</button>
+          </div>
+          {guiaApp === "inapp" ? (
+            <span>
+              1️⃣ Tocá los <b>3 puntitos (⋯)</b> abajo a la derecha y elegí <b>“Abrir en el navegador”</b> (Safari o Chrome).<br />
+              2️⃣ Ahí tocá <b>📲 Instalar App</b> (o <b>Compartir ⬆️ → Agregar a inicio</b>) y te queda con el ícono de <b>{ficha.nombre}</b>.
+            </span>
+          ) : guiaApp === "ios" ? (
+            <span>
+              1️⃣ Tocá el botón <b>Compartir (⬆️)</b> en la barra de abajo de Safari.<br />
+              2️⃣ Elegí <b>“Agregar a pantalla de inicio” (➕)</b>. Queda instalada con la foto de <b>{ficha.nombre}</b> y habilita las notificaciones en iPhone.
+            </span>
+          ) : (
+            <span>
+              1️⃣ Tocá el menú de <b>3 puntitos (⋮)</b> arriba a la derecha en tu navegador.<br />
+              2️⃣ Tocá <b>“Instalar aplicación”</b> o <b>“Agregar a la pantalla principal”</b>.
+            </span>
+          )}
+        </div>
+      )}
       {avisoVivo && (
         <div
           style={{

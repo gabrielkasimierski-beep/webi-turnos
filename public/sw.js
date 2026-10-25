@@ -12,6 +12,7 @@ self.addEventListener("push", (event) => {
     body: "Tenés una novedad en tu agenda.",
     tag: "webi-push-" + Date.now(),
     url: "/panel",
+    icon: "/api/icono?s=192",
   };
   try {
     if (event.data) {
@@ -31,8 +32,11 @@ self.addEventListener("push", (event) => {
       self.registration.showNotification(data.title, {
         body: data.body,
         tag: data.tag,
+        icon: data.icon || "/api/icono?s=192",
+        badge: data.icon || "/api/icono?s=192",
         renotify: true,
-        vibrate: [200, 100, 200],
+        requireInteraction: true,
+        vibrate: [250, 100, 250, 100, 250],
         data: { url: data.url || "/panel" },
       }),
       self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
