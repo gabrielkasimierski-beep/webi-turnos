@@ -68,19 +68,12 @@ En producción la app **exige** `DATABASE_URL` y `SESSION_SECRET` (si faltan, fa
 - Multi-local real con QR por local, chat del cliente con intérprete propio, panel con agenda/caja/buscador/historial, pantalla Configurar (servicios, precios, duraciones, recursos, horarios, FAQs, logo, color).
 - Login del dueño sin contraseña (código por mail).
 - Recordatorios semi-automáticos: link `wa.me` de 1 toque con el mensaje armado.
-- **Seña manual:** el cliente ve el alias y avisa “ya la transferí” → el local la marca como recibida.
+- **Seña por alias + verificación de comprobante:** el cliente ve el alias (sin comisiones) y sube la captura del comprobante en el chat → el asistente corrobora por OCR que el importe y la fecha de hoy coincidan y lo marca automáticamente como *"Ya pagó · Comprobante ✓"* para que el local lo vea en su agenda.
 - **Fidelidad:** contador de visitas atendidas por teléfono; el local configura premio y cada cuántas visitas; en la agenda ve cuándo hay premio para entregar. El cliente lo consulta en el chat (“Mis visitas y premio”).
 
-## Fase 2: Mercado Pago y WhatsApp (ya está el código; faltan tus credenciales)
+## Fase 2: WhatsApp automático (ya está el código; faltan tus credenciales)
 
-Sin credenciales todo queda apagado y la app sigue funcionando como Fase 1 (seña por transferencia, link wa.me). El panel muestra “todavía no está habilitado” hasta que cargues las variables.
-
-### Mercado Pago (cada local conecta su cuenta)
-1. https://www.mercadopago.com.ar/developers → **Tus integraciones → Crear aplicación** → Checkout Pro.
-2. En la app: **Redirect URL** = `<NEXT_PUBLIC_BASE_URL>/api/mp/callback`. Copiá *Client ID* y *Client Secret* → `MP_CLIENT_ID`, `MP_CLIENT_SECRET`.
-3. (Recomendado) Webhooks → copiá la clave secreta a `MP_WEBHOOK_SECRET` (valida la firma de los avisos). La URL de notificación la manda la app en cada cobro.
-4. Cada dueño entra a **Configurar → 9 · Mercado Pago** y toca **Conectar**: autoriza en MP y vuelve. Sus tokens se guardan **cifrados** (AES-GCM, clave de `SESSION_SECRET`/`TOKEN_KEY`) y se renuevan solos.
-5. Desde ahí, el cliente ve “Pagar con Mercado Pago” en el chat; la plata va **directo a la cuenta del local** y el webhook marca la seña como recibida (se verifica el pago consultándolo a MP y que el monto cubra la seña). Si el cliente prefiere, sigue pudiendo transferir.
+Sin credenciales queda apagado y la app sigue funcionando con el link `wa.me` manual.
 
 ### WhatsApp (un número de WEBI para todos)
 1. Meta for Developers → app tipo *Business* → producto **WhatsApp** → conseguí un número, el *Phone number ID* y un *token permanente* (usuario del sistema) → `WA_PHONE_ID`, `WA_TOKEN`.

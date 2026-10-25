@@ -1,9 +1,12 @@
 import { after } from "next/server";
 import { avisarReserva } from "@/server/whatsapp";
-import { conSlug, error, json } from "@/server/http";
+import { conSlug, error, ipDe, json, rateLimit } from "@/server/http";
 import { reservar } from "@/server/repo";
 
 export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
+  if (!rateLimit("res:" + ipDe(req), 12, 60_000)) {
+    return error("Demasiadas reservas seguidas desde esta conexión. Esperá un minuto.", 429);
+  }
   const loc = await conSlug((await params).slug);
   if (!loc) return error("Local no encontrado.", 404);
   const b = await req.json().catch(() => null);

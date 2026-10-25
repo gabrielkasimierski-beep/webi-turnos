@@ -1,9 +1,9 @@
 "use client";
 /* =====================================================================
-   CARA LOCAL · agenda del día, cierre de turnos, caja, recordatorios, buscador, historial y fidelidad.
-   Portado del demo: la lógica es la misma; los datos vienen de /api/panel/* (siempre del local de la sesión).
+   CARA LOCAL · agenda del día, notificaciones push + sonido en tiempo real,
+   cierre de turnos, caja, recordatorios, buscador, historial y fidelidad.
    ===================================================================== */
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Ficha, ResumenCliente, Turno } from "@/lib/tipos";
 import { aHora, aMin, cap, desdeIso, DIAS, diasAbiertos, dig, etiquetaDia, hoyIso, libres, mismoTel, norm, plata, precioTxt, senaDe } from "@/lib/negocio";
 
@@ -14,6 +14,50 @@ function estadoVisible(t: Turno) {
   if (t.estado === "pendiente") { const fin = desdeIso(t.fecha); fin.setMinutes(aMin(t.hora) + (t.dur || 30)); if (fin < new Date()) return "sin"; }
   return t.estado as string;
 }
+
+/** Sonido sintético limpio (Web Audio API, sin archivos externos) para avisar nuevo turno o seña verificada. */
+function sonarAviso(tipo: "turno" | "sena" = "turno") {
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const notas = tipo === "sena" ? [587.33, 783.99, 1046.5] : [523.25, 659.25];
+    notas.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.001, ctx.currentTime + i * 0.13);
+      gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + i * 0.13 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.13 + 0.24);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + i * 0.13);
+      osc.stop(ctx.currentTime + i * 0.13 + 0.25);
+    });
+  } catch { /* audio bloqueado hasta interacción */ }
+}
+
+/** Dispara notificación nativa del sistema / celular mediante Service Worker (o Notification API directa). */
+async function dispararPushLocal(titulo: string, cuerpo: string, tag: string) {
+  try {
+    if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]);
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    if ("serviceWorker" in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg && "showNotification" in reg) {
+        await reg.showNotification(titulo, {
+          body: cuerpo,
+          tag,
+          renotify: true,
+        } as NotificationOptions);
+        return;
+      }
+    }
+    new Notification(titulo, { body: cuerpo, tag });
+  } catch { /* sin soporte */ }
+}
+
 /** Link wa.me de 1 toque con el recordatorio ya escrito (semi-automático: el local toca enviar). */
 function waLink(t: Turno, f: Ficha) {
   let d = (t.tel || "").replace(/\D/g, ""); if (!d) return null;
@@ -36,23 +80,91 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
   const [cargado, setCargado] = useState(false);
   const [dia, setDia] = useState<string>(hoyIso());
   const [abierto, setAbierto] = useState<string | null>(null);
+  const [verComp, setVerComp] = useState<string | null>(null);
   const [confirmar, setConfirmar] = useState<string | null>(null);
   const [agregando, setAgregando] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [error, setError] = useState("");
   const [copia, setCopia] = useState<{ txt: string; ok: boolean } | null>(null);
   const [fid, setFid] = useState<ResumenCliente | null>(null);
+  const [permisoPush, setPermisoPush] = useState<string>("default");
+  const [avisoVivo, setAvisoVivo] = useState<string | null>(null);
+  const prevTurnosRef = useRef<Map<string, Turno> | null>(null);
   const palabra = ficha.palabra || "turno";
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if ("Notification" in window) setPermisoPush(Notification.permission);
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+  }, []);
+
+  async function activarNotificaciones() {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setAvisoVivo("Este navegador no soporta notificaciones nativas, pero el aviso sonoro en pantalla está activo.");
+      sonarAviso("sena");
+      return;
+    }
+    try {
+      const p = await Notification.requestPermission();
+      setPermisoPush(p);
+      if (p === "granted") {
+        sonarAviso("sena");
+        await dispararPushLocal(
+          "🔔 Notificaciones activadas · " + ficha.nombre,
+          "Te vamos a avisar con sonido y notificación apenas entre un " + palabra + " o un comprobante de seña.",
+          "webi-test-" + Date.now(),
+        );
+        setAvisoVivo("¡Listo! Ya tenés activadas las notificaciones y el sonido en este dispositivo.");
+      } else {
+        setAvisoVivo("Permiso bloqueado en el navegador. Habilitalo desde el candadito de la barra de direcciones.");
+      }
+    } catch { /* ignorar */ }
+  }
 
   const cargar = useCallback(async () => {
     try {
       const r = await (await fetch("/api/panel/turnos", { cache: "no-store" })).json();
-      if (r.ok) { setTurnos(r.turnos); setCargado(true); } else if (r.motivo === "Sin sesión.") window.location.href = "/login";
+      if (r.ok) {
+        const nuevos: Turno[] = r.turnos;
+        if (prevTurnosRef.current) {
+          const prev = prevTurnosRef.current;
+          for (const t of nuevos) {
+            const ant = prev.get(t.id);
+            if (!ant && t.estado === "pendiente") {
+              const msg = `📅 Nuevo ${palabra}: ${t.nombre || "Cliente"} · ${etiquetaDia(t.fecha)} ${t.hora} h (${t.servicioNombre})`;
+              setAvisoVivo(msg);
+              sonarAviso("turno");
+              dispararPushLocal(`📅 Nuevo ${palabra} en ${ficha.nombre}`, `${t.nombre || "Cliente"} · ${etiquetaDia(t.fecha)} a las ${t.hora} h (${t.servicioNombre})`, "turno-" + t.id);
+            } else if (ant && ant.sena?.estado !== "declarada" && t.sena?.estado === "declarada") {
+              const msg = `✅ ¡Seña verificada! ${t.nombre || "Cliente"} transfirió ${plata(t.sena.monto)} (${etiquetaDia(t.fecha)} ${t.hora} h)`;
+              setAvisoVivo(msg);
+              sonarAviso("sena");
+              dispararPushLocal(`✅ Seña verificada · ${plata(t.sena.monto)}`, `${t.nombre || "Cliente"} subió el comprobante para ${etiquetaDia(t.fecha)} a las ${t.hora} h`, "sena-" + t.id);
+            } else if (ant && !ant.confirmado && t.confirmado) {
+              const msg = `👍 ${t.nombre || "Cliente"} confirmó asistencia (${etiquetaDia(t.fecha)} ${t.hora} h)`;
+              setAvisoVivo(msg);
+              sonarAviso("turno");
+              dispararPushLocal(`👍 Asistencia confirmada`, `${t.nombre || "Cliente"} confirmó su ${palabra} del ${etiquetaDia(t.fecha)} a las ${t.hora} h`, "conf-" + t.id);
+            } else if (ant && ant.estado !== "cancelado" && t.estado === "cancelado") {
+              const msg = `⚠️ ${t.nombre || "Cliente"} canceló el ${palabra} del ${etiquetaDia(t.fecha)} ${t.hora} h (lugar liberado)`;
+              setAvisoVivo(msg);
+              sonarAviso("turno");
+              dispararPushLocal(`⚠️ ${cap(palabra)} cancelado`, `${t.nombre || "Cliente"} liberó el ${etiquetaDia(t.fecha)} a las ${t.hora} h`, "canc-" + t.id);
+            }
+          }
+        }
+        prevTurnosRef.current = new Map(nuevos.map((t) => [t.id, t]));
+        setTurnos(nuevos);
+        setCargado(true);
+      } else if (r.motivo === "Sin sesión.") window.location.href = "/login";
     } catch { /* sin conexión: queda lo que había */ }
-  }, []);
-  // "en vivo": se vuelve a pedir cada 15 s y al volver a la pestaña
+  }, [ficha.nombre, palabra]);
+
+  // "en vivo": se vuelve a pedir cada 12 s y al volver a la pestaña
   useEffect(() => {
-    cargar(); const i = setInterval(cargar, 15000); const v = () => { if (!document.hidden) cargar(); };
+    cargar(); const i = setInterval(cargar, 12000); const v = () => { if (!document.hidden) cargar(); };
     document.addEventListener("visibilitychange", v); return () => { clearInterval(i); document.removeEventListener("visibilitychange", v); };
   }, [cargar]);
 
@@ -93,6 +205,8 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
   const pendientes = activos.filter((t) => t.estado === "pendiente").length;
   const senaRec = activos.filter((t) => t.sena.estado === "recibida").reduce((s, t) => s + (t.sena.monto || 0), 0);
   const senaDec = activos.filter((t) => t.sena.estado === "declarada").reduce((s, t) => s + (t.sena.monto || 0), 0);
+  const linkChat = typeof window !== "undefined" ? window.location.origin + "/t/" + ficha.slug : "/t/" + ficha.slug;
+  const msgWaCliente = `Si querés sacar o agendar turno o una visita, entrá a este link que te va a atender nuestro asesor virtual: ${linkChat}`;
 
   function textoResumen() {
     const titulo = dia === "sin" ? "Sin cerrar" : dia === "recordar" ? "Por recordar" : etiquetaDia(dia);
@@ -106,13 +220,50 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
     const txt = textoResumen();
     try { await navigator.clipboard.writeText(txt); setCopia({ txt, ok: true }); } catch { setCopia({ txt, ok: false }); }
   }
+  async function copiarLinkRapido() {
+    try {
+      await navigator.clipboard.writeText(msgWaCliente);
+      setAvisoVivo("📋 Mensaje con tu link copiado ✓ Pegalo en el chat del cliente o fijalo (📌) en tu teclado.");
+    } catch {
+      setAvisoVivo("Tu link es: " + linkChat);
+    }
+  }
 
   return (
     <div className="hoja">
       <div className="cab">
         <div><h2>{ficha.nombre}</h2><p className="sub">Agenda del local · {ficha.rubro}</p></div>
-        <div className="modo"><span className={"punto" + (cargado ? "" : " no")} />{cargado ? "En vivo: lo que se reserva en el chat aparece acá" : "Cargando…"}</div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            className={"btn" + (permisoPush === "granted" ? "" : " pri")}
+            style={{ fontSize: ".8rem", padding: "6px 10px" }}
+            onClick={activarNotificaciones}
+          >
+            {permisoPush === "granted" ? "🔔 Probar aviso" : "🔔 Activar notificaciones"}
+          </button>
+          <div className="modo"><span className={"punto" + (cargado ? "" : " no")} />{cargado ? "En vivo" : "Cargando…"}</div>
+        </div>
       </div>
+      {avisoVivo && (
+        <div
+          style={{
+            background: "var(--surface)",
+            border: "1.5px solid var(--brand)",
+            borderRadius: 12,
+            padding: "10px 14px",
+            marginBottom: 12,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 10,
+            fontWeight: 500,
+          }}
+        >
+          <span>{avisoVivo}</span>
+          <button type="button" className="btn" style={{ padding: "4px 9px" }} onClick={() => setAvisoVivo(null)}>✕</button>
+        </div>
+      )}
       {error && <p className="nota mal">{error}</p>}
       <div className="dias" role="group" aria-label="Día">
         {dias.map((d) => { const dd = desdeIso(d), n = conteo(d);
@@ -130,15 +281,16 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
       {(senaRec > 0 || senaDec > 0) && <div className="medios num">Señas: {plata(senaRec)} recibidas{senaDec > 0 ? " · " + plata(senaDec) + " por verificar" : ""}</div>}
       <div className="acciones">
         <button className="btn pri" onClick={() => setAgregando(!agregando)}>{agregando ? "Cerrar" : "+ Agregar " + palabra}</button>
+        <button className="btn" type="button" onClick={copiarLinkRapido}>📋 Copiar respuesta p/ clientes</button>
+        <a className="btn" href={"https://wa.me/?text=" + encodeURIComponent(msgWaCliente)} target="_blank" rel="noopener">📲 Mandar link por WhatsApp</a>
         {activos.length > 0 && <button className="btn" onClick={copiarResumen}>Copiar resumen del día</button>}
         {copia && <span className={"nota " + (copia.ok ? "ok" : "mal")}>{copia.ok ? "Copiado ✓" : "No pude copiar solo. Copialo de acá:"}</span>}
-        <span className="nota">Para el que llega sin {palabra} o llama por teléfono.</span>
       </div>
       {copia && !copia.ok && <textarea readOnly value={copia.txt} rows={Math.min(12, copia.txt.split("\n").length + 1)} style={{ width: "100%", border: "1px solid var(--line)", borderRadius: 10, padding: "9px 10px", background: "var(--surface)" }} onFocus={(e) => e.currentTarget.select()} />}
       {agregando && <FormAgregar ficha={ficha} turnos={turnos} fecha={dia === "sin" || dia === "recordar" ? hoyIso() : dia} onListo={async () => { setAgregando(false); await cargar(); }} />}
       <div className="buscar"><input type="search" autoComplete="off" placeholder="Buscar cliente por nombre o teléfono" aria-label="Buscar cliente por nombre o teléfono" value={busqueda} onChange={(e) => { setBusqueda(e.target.value); setAbierto(null); }} /></div>
       {!lista.length ? (
-        <div className="vacio">{q.length >= 2 ? <>No encontré a nadie con “{q}”.</> : dia === "sin" ? "Todo cerrado. Bien ahí." : dia === "recordar" ? "Nada por recordar. Bien ahí." : <>Todavía no hay {palabra}s este día.<br />Compartí el QR del local y mirá cómo aparecen acá.</>}</div>
+        <div className="vacio">{q.length >= 2 ? <>No encontré a nadie con “{q}”.</> : dia === "sin" ? "Todo cerrado. Bien ahí." : dia === "recordar" ? "Nada por recordar. Bien ahí." : <>Todavía no hay {palabra}s este día.<br />Compartí el link o el QR del local y mirá cómo aparecen acá.</>}</div>
       ) : (
         <div className="lista">
           {lista.map((t) => {
@@ -154,7 +306,7 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
                 {t.estado !== "cancelado" && (t.confirmado || sn) && (
                   <div className="marcas">
                     {t.confirmado && <span className="pill atendido">Confirmó ✓</span>}
-                    {sn && <span className={"pill " + ({ pendiente: "pendiente", declarada: "warn", recibida: "atendido" } as Record<string, string>)[sn.estado]}>{({ pendiente: "Seña ⏳", declarada: "Seña declarada", recibida: "Seña ✓" } as Record<string, string>)[sn.estado]} {plata(sn.monto)}</span>}
+                    {sn && <span className={"pill " + ({ pendiente: "pendiente", declarada: "warn", recibida: "atendido" } as Record<string, string>)[sn.estado]}>{({ pendiente: "Seña ⏳", declarada: "Ya pagó · Comprobante ✓", recibida: "Seña ✓" } as Record<string, string>)[sn.estado]} {plata(sn.monto)}</span>}
                   </div>
                 )}
                 {abre && (
@@ -163,12 +315,23 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
                       <>
                         {PAGOS.map((p) => <button key={p} className="btn ok" onClick={() => { setAbierto(null); cambiar(t.id, { estado: "atendido", pago: p }); }}>✓ {p}</button>)}
                         {sn && (sn.estado === "pendiente" || sn.estado === "declarada") && <button className="btn ok" onClick={() => { setAbierto(null); cambiar(t.id, { senaEstado: "recibida" }); }}>Seña recibida</button>}
+                        {sn?.comprobante && <button className="btn" onClick={() => setVerComp(verComp === t.id ? null : t.id)}>{verComp === t.id ? "Ocultar comprobante" : "📎 Ver comprobante"}</button>}
                         {!t.confirmado && <button className="btn" onClick={() => cambiar(t.id, { confirmado: true })}>Marcar confirmado</button>}
                         <button className="btn" onClick={() => { setAbierto(null); cambiar(t.id, { estado: "no_vino" }); }}>No vino</button>
                         <button className="btn peligro" onClick={() => { if (confirmar !== t.id) return setConfirmar(t.id); setConfirmar(null); setAbierto(null); cambiar(t.id, { estado: "cancelado" }); }}>{confirmar === t.id ? "¿Seguro? Tocá de nuevo" : "Cancelar"}</button>
                         {w && <a className="btn" href={w} target="_blank" rel="noopener" onClick={() => setTimeout(() => cambiar(t.id, { recordado: true }), 80)}>{t.recordado ? "Recordar de nuevo" : "Recordar por WhatsApp"}</a>}
                       </>
-                    ) : <button className="btn" onClick={() => { setAbierto(null); cambiar(t.id, { estado: "pendiente", pago: null }); }}>Volver a pendiente</button>}
+                    ) : (
+                      <>
+                        <button className="btn" onClick={() => { setAbierto(null); cambiar(t.id, { estado: "pendiente", pago: null }); }}>Volver a pendiente</button>
+                        {sn?.comprobante && <button className="btn" onClick={() => setVerComp(verComp === t.id ? null : t.id)}>{verComp === t.id ? "Ocultar comprobante" : "📎 Ver comprobante"}</button>}
+                      </>
+                    )}
+                    {sn?.comprobante && verComp === t.id && (
+                      <div style={{ width: "100%", marginTop: 6 }}>
+                        <img src={sn.comprobante} alt="Comprobante de seña" style={{ maxWidth: "min(360px, 100%)", borderRadius: 12, border: "1px solid var(--line)", display: "block" }} />
+                      </div>
+                    )}
                     {t.tel && <span className="nota num">{t.tel}</span>}
                     {t.tel && (!otros.length ? <span className="nota">Cliente nuevo</span> : <span className="nota">Cliente: {visitas} {visitas === 1 ? "visita" : "visitas"} · {ausencias} {ausencias === 1 ? "ausencia" : "ausencias"}</span>)}
                     {fid && ficha.fidelidad.activa && (

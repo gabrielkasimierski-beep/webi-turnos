@@ -67,6 +67,6 @@ export function armarFicha(clave: string, slug = "", nombre?: string): Ficha {
     intervalo: 30, anticipacion: 14, recordatorioHoras: 24, pedirConfirmacion: true,
     sena: SENAS[clave] ? { ...SENAS[clave] } : { activa: false, obligatoria: false, tipo: "fijo", monto: 0, alias: "", nota: "" },
     fidelidad: { activa: false, cadaCuantos: 5, premio: "" },
-    whatsappAuto: true, mpConectado: false,
+    whatsappAuto: true,
   };
 }

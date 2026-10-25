@@ -1,14 +1,18 @@
-/* Aplica las migraciones de ./drizzle a la base de DATABASE_URL (Neon). Uso: npm run db:migrar */
+/* Aplica las migraciones de ./drizzle a la base de DATABASE_URL (Neon).
+   Se ejecuta automáticamente en `npm run build` en Vercel si DATABASE_URL está definida, o manualmente con `npm run db:migrar`. */
 import { loadEnvConfig } from "@next/env";
 loadEnvConfig(process.cwd());
 
 async function main() {
   const url = process.env.DATABASE_URL?.trim();
-  if (!url) { console.error("Falta DATABASE_URL en .env.local"); process.exit(1); }
+  if (!url) {
+    console.log("[db:migrar] Sin DATABASE_URL definida; omitiendo migración remota (en local PGlite migra solo).");
+    return;
+  }
   const { neon } = await import("@neondatabase/serverless");
   const { drizzle } = await import("drizzle-orm/neon-http");
   const { migrate } = await import("drizzle-orm/neon-http/migrator");
   await migrate(drizzle(neon(url)), { migrationsFolder: "./drizzle" });
-  console.log("Migraciones aplicadas ✅");
+  console.log("[db:migrar] Migraciones aplicadas en Neon ✅");
 }
 main().catch((e) => { console.error(e); process.exit(1); });

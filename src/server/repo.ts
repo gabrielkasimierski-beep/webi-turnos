@@ -7,6 +7,7 @@ import { getDb, schema } from "@/db";
 import { aMin, ahoraAR, desdeIso, diasAbiertos, dig, hoyIso, iso, libres, pideSena, senaMonto, slugify, telClave } from "@/lib/negocio";
 import type { Ficha, Ocupacion, ResumenCliente, Turno } from "@/lib/tipos";
 import { armarFicha } from "@/lib/rubros";
+import { verificarComprobanteImagen } from "./comprobante";
 
 const { locales, recursos, servicios, turnos, clientes, usuarios } = schema;
 const nuevoId = (pref = "") => pref + crypto.randomUUID().replace(/-/g, "").slice(0, 16);
@@ -21,7 +22,7 @@ function aFicha(l: FilaLocal, rs: (typeof recursos.$inferSelect)[], ss: (typeof 
     recursos: rs.sort((a, b) => a.orden - b.orden).map((r) => ({ id: r.id, nombre: r.nombre })),
     servicios: ss.sort((a, b) => a.orden - b.orden).map((s) => ({ id: s.id, nombre: s.nombre, precio: s.precio, duracion: s.duracion, alias: s.alias, sena: s.sena })),
     horarios: l.horarios, faqs: l.faqs, intervalo: l.intervalo, anticipacion: l.anticipacion,
-    recordatorioHoras: l.recordatorioHoras, pedirConfirmacion: l.pedirConfirmacion, sena: l.sena, fidelidad: l.fidelidad, whatsappAuto: l.whatsappAuto, mpConectado: !!l.mpAccessToken,
+    recordatorioHoras: l.recordatorioHoras, pedirConfirmacion: l.pedirConfirmacion, sena: l.sena, fidelidad: l.fidelidad, whatsappAuto: l.whatsappAuto,
   };
 }
 
@@ -81,12 +82,12 @@ export async function guardarFicha(localId: string, f: Ficha) {
 }
 
 /** Alta de un local nuevo con un rubro de ejemplo + su dueño. */
-export async function crearLocal(p: { nombre: string; rubroClave: string; mail: string; whatsapp?: string }) {
+export async function crearLocal(p: { nombre: string; rubroClave: string; mail: string; claveHash: string; whatsapp?: string }) {
   const db = await getDb();
   const base = slugify(p.nombre);
   let slug = base, i = 2;
   while ((await db.select({ id: locales.id }).from(locales).where(eq(locales.slug, slug)).limit(1)).length) slug = base + "-" + i++;
-  const id = nuevoId("loc_");
+  const id = nuevoId("loc_"), usuarioId = nuevoId("usr_");
   const f = armarFicha(p.rubroClave, slug, p.nombre);
   // los ids de recursos/servicios son globales: se les suma un sufijo propio del local
   const suf = id.slice(-5);
@@ -99,15 +100,15 @@ export async function crearLocal(p: { nombre: string; rubroClave: string; mail: 
   });
   await db.insert(recursos).values(f.recursos.map((r, o) => ({ id: r.id, localId: id, nombre: r.nombre, orden: o })));
   await db.insert(servicios).values(f.servicios.map((s, o) => ({ id: s.id, localId: id, nombre: s.nombre, precio: s.precio, duracion: s.duracion, alias: s.alias, sena: s.sena, orden: o })));
-  await db.insert(usuarios).values({ id: nuevoId("usr_"), localId: id, mail: p.mail.toLowerCase(), whatsapp: p.whatsapp || "", rol: "dueno" });
-  return { id, slug };
+  await db.insert(usuarios).values({ id: usuarioId, localId: id, mail: p.mail.toLowerCase(), claveHash: p.claveHash, whatsapp: p.whatsapp || "", rol: "dueno" });
+  return { id, slug, usuarioId };
 }
 
 /* ---------- turnos ---------- */
 const aTurno = (t: typeof turnos.$inferSelect): Turno => ({
   id: t.id, fecha: t.fecha, hora: t.hora, dur: t.dur, servicioId: t.servicioId, servicioNombre: t.servicioNombre, precio: t.precio,
   recursoId: t.recursoId, recursoNombre: t.recursoNombre, nombre: t.nombre, tel: t.tel, estado: t.estado as Turno["estado"], pago: t.pago,
-  sena: { monto: t.senaMonto, estado: t.senaEstado as Turno["sena"]["estado"] }, confirmado: t.confirmado,
+  sena: { monto: t.senaMonto, estado: t.senaEstado as Turno["sena"]["estado"], comprobante: t.senaComprobante }, confirmado: t.confirmado,
   recordado: t.recordado ? t.recordado.toISOString() : null, origen: t.origen, creado: t.creado.toISOString(),
 });
 
@@ -119,12 +120,16 @@ export async function ocupacion(localId: string): Promise<Ocupacion[]> {
   return filas;
 }
 
-/** Turnos para el panel del dueño: los últimos `atras` días y todo lo futuro. */
-export async function turnosDelLocal(localId: string, atras = 90): Promise<Turno[]> {
+/** Turnos para el panel del dueño: ventana corta (últimos 14 días) y sin comprobantes de turnos ya cerrados. */
+export async function turnosDelLocal(localId: string, atras = 14): Promise<Turno[]> {
   const db = await getDb();
   const d = ahoraAR(); d.setDate(d.getDate() - atras);
   const filas = await db.select().from(turnos).where(and(eq(turnos.localId, localId), gte(turnos.fecha, iso(d)))).orderBy(asc(turnos.fecha), asc(turnos.hora));
-  return filas.map(aTurno);
+  return filas.map((f) => {
+    const t = aTurno(f);
+    if (t.estado !== "pendiente") t.sena.comprobante = null;
+    return t;
+  });
 }
 
 async function upsertCliente(localId: string, nombre: string, tel: string) {
@@ -190,11 +195,18 @@ export async function cambiarTurno(localId: string, id: string, c: Cambios) {
   if (c.estado) {
     if (!["pendiente", "atendido", "no_vino", "cancelado"].includes(c.estado)) throw new Error("estado inválido");
     set.estado = c.estado; set.cerrado = c.estado === "atendido" ? new Date() : null;
+    // Al cerrar o cancelar el turno, borramos la imagen del comprobante para no acumular datos bancarios en la base.
+    if (c.estado !== "pendiente") set.senaComprobante = null;
   }
   if (c.pago !== undefined) set.pago = c.pago;
   if (c.confirmado !== undefined) set.confirmado = c.confirmado;
   if (c.recordado !== undefined) set.recordado = c.recordado ? new Date() : null;
-  if (c.senaEstado) { if (!["no", "pendiente", "declarada", "recibida"].includes(c.senaEstado)) throw new Error("seña inválida"); set.senaEstado = c.senaEstado; }
+  if (c.senaEstado) {
+    if (!["no", "pendiente", "declarada", "recibida"].includes(c.senaEstado)) throw new Error("seña inválida");
+    set.senaEstado = c.senaEstado;
+    // Una vez que el dueño confirma la seña como recibida, descartamos la foto del comprobante.
+    if (c.senaEstado === "recibida") set.senaComprobante = null;
+  }
   if (!Object.keys(set).length) return false;
   const db = await getDb();
   try {
@@ -211,18 +223,34 @@ export async function misTurnos(localId: string, tel: string): Promise<Turno[]> 
   const ahora = ahoraAR();
   // oculta el que ya terminó hoy
   return filas.map(aTurno).filter((t) => { const fin = desdeIso(t.fecha); fin.setMinutes(aMin(t.hora) + (t.dur || 30)); return fin >= ahora; })
-    .map((t) => ({ ...t, tel: "" })); // el cliente ya conoce su teléfono; no se devuelve
+    .map((t) => ({ ...t, tel: "", sena: { monto: t.sena.monto, estado: t.sena.estado } })); // el cliente ya conoce su teléfono; no se devuelve
 }
-/** El cliente solo puede cancelar, confirmar o declarar la seña de un turno que tenga SU teléfono. */
-export async function accionCliente(localId: string, id: string, tel: string, accion: "cancelar" | "confirmar" | "declarar_sena") {
+/** El cliente solo puede cancelar o confirmar un turno que tenga SU teléfono. La seña se declara subiendo el comprobante verificado. */
+export async function accionCliente(localId: string, id: string, tel: string, accion: "cancelar" | "confirmar") {
   const clave = telClave(tel); if (!clave) return false;
   const db = await getDb();
   const [t] = await db.select().from(turnos).where(and(eq(turnos.id, id), eq(turnos.localId, localId), eq(turnos.telClave, clave), eq(turnos.estado, "pendiente")));
   if (!t) return false;
   if (accion === "cancelar") await db.update(turnos).set({ estado: "cancelado" }).where(eq(turnos.id, id));
   else if (accion === "confirmar") await db.update(turnos).set({ confirmado: true }).where(eq(turnos.id, id));
-  else if (t.senaEstado === "pendiente") await db.update(turnos).set({ senaEstado: "declarada" }).where(eq(turnos.id, id));
   return true;
+}
+
+/** Verifica el comprobante de seña subido por el cliente (importe + fecha de hoy) y, si coincide, marca la seña como declarada. */
+export async function subirComprobanteCliente(localId: string, id: string, tel: string, imagenDataUrl: string) {
+  const clave = telClave(tel);
+  if (!clave) return { ok: false as const, motivo: "Falta el celular del turno." };
+  const db = await getDb();
+  const [t] = await db.select().from(turnos).where(and(eq(turnos.id, id), eq(turnos.localId, localId), eq(turnos.telClave, clave), eq(turnos.estado, "pendiente")));
+  if (!t || t.senaMonto <= 0) return { ok: false as const, motivo: "No encontré ese turno pendiente de seña." };
+  if (t.senaEstado === "recibida") return { ok: true as const };
+
+  const hoy = hoyIso(ahoraAR());
+  const verif = await verificarComprobanteImagen(imagenDataUrl, t.senaMonto, [hoy]);
+  if (!verif.ok) return verif;
+
+  await db.update(turnos).set({ senaEstado: "declarada", senaComprobante: imagenDataUrl }).where(eq(turnos.id, t.id));
+  return { ok: true as const };
 }
 
 /* ---------- fidelidad: contador por teléfono ---------- */
@@ -249,14 +277,6 @@ export async function entregarPremio(localId: string, tel: string, fid: Ficha["f
 
 
 /* ---------- integraciones ---------- */
-/** Un turno pendiente con seña por pagar, solo si el teléfono es el del cliente. */
-export async function turnoConSenaDeCliente(localId: string, id: string, tel: string) {
-  const clave = telClave(tel); if (!clave) return null;
-  const db = await getDb();
-  const [t] = await db.select().from(turnos).where(and(eq(turnos.id, id), eq(turnos.localId, localId), eq(turnos.telClave, clave), eq(turnos.estado, "pendiente")));
-  return t && t.senaMonto > 0 && t.senaEstado !== "recibida" ? aTurno(t) : null;
-}
-
 /** Turnos de todos los locales que toca recordar ahora (para el cron). Cada uno trae lo necesario para armar el mensaje. */
 export async function turnosParaRecordarAhora() {
   const db = await getDb(), ahora = ahoraAR();

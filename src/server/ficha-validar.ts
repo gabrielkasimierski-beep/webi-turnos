@@ -1,7 +1,7 @@
 import type { Ficha, Horarios } from "@/lib/tipos";
 import { aMin, slugify } from "@/lib/negocio";
 
-const txt = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max);
+const txt = (v: unknown, max: number) => String(v ?? "").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "").trim().slice(0, max);
 const num = (v: unknown, min: number, max: number, def: number) => { const n = Number(v); return Number.isFinite(n) ? Math.min(max, Math.max(min, Math.round(n))) : def; };
 const hora = (v: unknown) => (/^\d{1,2}:\d{2}$/.test(String(v)) ? String(v).padStart(5, "0") : null);
 
@@ -51,7 +51,7 @@ export function validarFicha(entrada: Ficha, actual: Ficha): { ok: true; ficha: 
       pedirConfirmacion: e.pedirConfirmacion !== false,
       sena: { activa: !!sn.activa, obligatoria: !!sn.obligatoria, tipo: pct ? "porcentaje" : "fijo", monto: Math.round(monto), alias: txt(sn.alias, 100), nota: txt(sn.nota, 160) },
       fidelidad: { activa: !!fid.activa, cadaCuantos: num(fid.cadaCuantos, 2, 100, 5), premio: txt(fid.premio, 80) },
-      whatsappAuto: e.whatsappAuto !== false, mpConectado: actual.mpConectado,
+      whatsappAuto: e.whatsappAuto !== false,
     },
   };
 }

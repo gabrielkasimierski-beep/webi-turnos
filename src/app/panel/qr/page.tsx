@@ -7,7 +7,7 @@ import { localPorId } from "@/server/repo";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "QR del local" };
 
-/** El QR que el local imprime y pega: apunta a /t/[slug]. */
+/** El QR que el local imprime y pega en el mostrador: apunta a /t/[slug]. */
 export default async function PaginaQr() {
   const s = await sesionActual();
   if (!s) redirect("/login");
@@ -21,7 +21,7 @@ export default async function PaginaQr() {
     <div className="centrado">
       <div className="tarjeta qr">
         <h1>{loc.ficha.nombre}</h1>
-        <p>Escaneá y sacá {loc.ficha.palabra === "reserva" ? "tu reserva" : "tu turno"} al toque 📲</p>
+        <p>Escaneá el QR: hablá con nuestro asesor virtual para sacar {loc.ficha.palabra === "reserva" ? "tu reserva" : "tu turno"}, seguinos en redes y dejá tu valoración en Google ⭐📲</p>
         <div dangerouslySetInnerHTML={{ __html: svg }} />
         <p className="num" style={{ wordBreak: "break-all", fontSize: ".85rem" }}>{url}</p>
         <button className="btn pri no-imprimir" id="imprimir">Imprimir</button>

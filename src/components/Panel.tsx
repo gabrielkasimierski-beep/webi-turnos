@@ -6,7 +6,7 @@ import { aplicarMarca } from "@/lib/html";
 import Agenda from "./Agenda";
 import Configurar from "./Configurar";
 
-export default function Panel({ fichaInicial, integ }: { fichaInicial: Ficha; integ: { mp: boolean; wa: boolean } }) {
+export default function Panel({ fichaInicial, integ }: { fichaInicial: Ficha; integ: { wa: boolean } }) {
   const [ficha, setFicha] = useState(fichaInicial);
   const [cara, setCara] = useState<"agenda" | "configurar">("agenda");
   useEffect(() => { aplicarMarca(ficha.color); }, [ficha.color]);

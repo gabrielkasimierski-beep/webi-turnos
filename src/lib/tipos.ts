@@ -31,7 +31,6 @@ export type Ficha = {
   sena: Sena;
   fidelidad: Fidelidad;
   whatsappAuto: boolean;
-  mpConectado: boolean;
 };
 
 export type EstadoTurno = "pendiente" | "atendido" | "no_vino" | "cancelado";
@@ -51,7 +50,7 @@ export type Turno = {
   tel: string;
   estado: EstadoTurno;
   pago: string | null;
-  sena: { monto: number; estado: EstadoSena };
+  sena: { monto: number; estado: EstadoSena; comprobante?: string | null };
   confirmado: boolean;
   recordado: string | null;
   origen: string;

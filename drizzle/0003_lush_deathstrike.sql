@@ -1,0 +1,1 @@
+ALTER TABLE "turnos" ADD COLUMN "sena_comprobante" text;
