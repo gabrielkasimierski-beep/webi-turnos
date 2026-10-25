@@ -56,6 +56,16 @@ type Flujo = {
   rerender?: () => void;
 };
 
+type MemoriaCharla = {
+  nombre?: string;
+  tel?: string;
+  servicioId?: string | null;
+  recursoId?: string | null;
+  fecha?: string | null;
+  fechasDescartadas: string[];
+  ultimoTurno?: Turno | null;
+};
+
 const DOTS = '<span class="dots" aria-label="Escribiendo"><i></i><i></i><i></i></span>';
 
 export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: string; fichaInicial: Ficha; ocupacionInicial: Ocupacion[] }) {
@@ -63,6 +73,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
     ficha: Ficha;
     ocup: Ocupacion[];
     flujo: Flujo | null;
+    memoria: MemoriaCharla;
     ultimoSrvId: string | null;
     accionSi: (() => void) | null;
     n: number;
@@ -71,6 +82,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
     ficha: fichaInicial,
     ocup: ocupacionInicial,
     flujo: null,
+    memoria: { fechasDescartadas: [] },
     ultimoSrvId: null,
     accionSi: null,
     n: 0,
@@ -125,13 +137,74 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
 
   useEffect(() => { const h = hiloRef.current; if (h) h.scrollTop = h.scrollHeight; }, [msgs, chips, propuesta, escribiendo]);
 
-  /* ---------- helpers de conversación ---------- */
+  /* ---------- helpers de conversación y memoria persistente en la charla ---------- */
   const F = () => R.current.ficha;
   const palabra = () => F().palabra || "turno";
   const elTurno = () => (palabra() === "reserva" ? "la reserva" : "el turno");
   const unTurno = () => (palabra() === "reserva" ? "una reserva" : "un turno");
   const flujo = () => R.current.flujo;
-  const setFlujo = (v: Flujo | null) => { R.current.flujo = v; };
+  const mem = () => R.current.memoria;
+
+  function guardarMemoriaSession() {
+    try {
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("webi_mem_" + slug, JSON.stringify(R.current.memoria));
+      }
+    } catch { /* ignorar */ }
+  }
+
+  function recordar(cambios: Partial<MemoriaCharla>) {
+    const m = R.current.memoria;
+    if (cambios.nombre) m.nombre = cambios.nombre;
+    if (cambios.tel) m.tel = cambios.tel;
+    if (cambios.servicioId !== undefined) m.servicioId = cambios.servicioId;
+    if (cambios.recursoId !== undefined) m.recursoId = cambios.recursoId;
+    if (cambios.fecha !== undefined) m.fecha = cambios.fecha;
+    if (cambios.ultimoTurno !== undefined) m.ultimoTurno = cambios.ultimoTurno;
+    if (cambios.fechasDescartadas) m.fechasDescartadas = cambios.fechasDescartadas;
+    guardarMemoriaSession();
+  }
+
+  function descartarFechaMem(d?: string | null) {
+    if (!d) return;
+    const m = R.current.memoria;
+    if (!m.fechasDescartadas.includes(d)) m.fechasDescartadas = [...m.fechasDescartadas, d];
+    guardarMemoriaSession();
+  }
+
+  const setFlujo = (v: Flujo | null) => {
+    if (v) {
+      const m = R.current.memoria;
+      if (!v.nombre && m.nombre) v.nombre = m.nombre;
+      if (!v.tel && m.tel) v.tel = m.tel;
+      if (v.nombre) m.nombre = v.nombre;
+      if (v.tel) m.tel = v.tel;
+      if (v.servicioId) m.servicioId = v.servicioId;
+      if (v.recursoId !== undefined) m.recursoId = v.recursoId;
+      if (v.fecha) m.fecha = v.fecha;
+      guardarMemoriaSession();
+    }
+    R.current.flujo = v;
+  };
+
+  /** Actualiza el flujo activo sin borrar lo que el cliente ya eligió en la charla. */
+  const actualizarFlujo = (cambios: Partial<Flujo>): Flujo => {
+    const actual = R.current.flujo || {};
+    const m = R.current.memoria;
+    const base: Flujo = {
+      servicioId: actual.servicioId ?? m.servicioId ?? undefined,
+      recursoId: actual.recursoId !== undefined ? actual.recursoId : m.recursoId,
+      fecha: actual.fecha ?? undefined,
+      hora: actual.hora ?? undefined,
+      franja: actual.franja ?? undefined,
+      nombre: actual.nombre || m.nombre,
+      tel: actual.tel || m.tel,
+      ...cambios,
+    };
+    setFlujo(base);
+    return base;
+  };
+
   const burbuja = (quien: "bot" | "yo", html: string) => setMsgs((m) => [...m, { id: ++R.current.n, quien, html }]);
 
   const chipsSet = (items: Chip[]) =>
@@ -237,6 +310,15 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
   useEffect(() => {
     if (R.current.iniciado) return;
     R.current.iniciado = true;
+    try {
+      const guardado = typeof window !== "undefined" ? sessionStorage.getItem("webi_mem_" + slug) : null;
+      if (guardado) {
+        const parsed = JSON.parse(guardado);
+        if (parsed && typeof parsed === "object") {
+          R.current.memoria = { fechasDescartadas: [], ...parsed };
+        }
+      }
+    } catch { /* ignorar */ }
     aplicarMarca(fichaInicial.color);
     saludo();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -280,7 +362,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
         ? `\nEl próximo lugar libre es <b>${etiquetaDia(prox.fecha).toLowerCase()} a las ${prox.horas[0].hora} h</b>.`
         : "";
       const iniciarConSrv = () => {
-        setFlujo({ servicioId: srv.id, recursoId: e?.recursoId, fecha: prox?.fecha || null });
+        actualizarFlujo({ servicioId: srv.id, ...(e?.recursoId !== undefined ? { recursoId: e.recursoId } : {}), ...(prox?.fecha ? { fecha: prox.fecha } : {}) });
         avanzar();
       };
       R.current.accionSi = iniciarConSrv;
@@ -294,7 +376,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
                     texto: `Reservar ${etiquetaDia(prox.fecha)} ${prox.horas[0].hora} h`,
                     lleno: true,
                     hacer: () => {
-                      setFlujo({ servicioId: srv.id, recursoId: e?.recursoId ?? null, fecha: prox.fecha, hora: prox.horas[0].hora });
+                      actualizarFlujo({ servicioId: srv.id, ...(e?.recursoId !== undefined ? { recursoId: e.recursoId } : {}), fecha: prox.fecha, hora: prox.horas[0].hora });
                       avanzar();
                     },
                   } as Chip,
@@ -320,7 +402,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
               texto: s.nombre + " · " + precioTxt(s),
               hacer: () => {
                 R.current.ultimoSrvId = s.id;
-                setFlujo({ servicioId: s.id });
+                actualizarFlujo({ servicioId: s.id });
                 avanzar();
               },
             })),
@@ -348,7 +430,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
               texto: `${etiquetaDia(p0.fecha)} ${h.hora} h`,
               lleno: true,
               hacer: () => {
-                setFlujo({ servicioId: srv.id, recursoId: e?.recursoId ?? null, fecha: p0.fecha, hora: h.hora });
+                actualizarFlujo({ servicioId: srv.id, ...(e?.recursoId !== undefined ? { recursoId: e.recursoId } : {}), fecha: p0.fecha, hora: h.hora });
                 avanzar();
               },
             })),
@@ -407,10 +489,10 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
             fi.recursos.map((r) => ({
               texto: r.nombre,
               hacer: () => {
-                setFlujo({ servicioId: srv?.id || null, recursoId: r.id, fecha: e?.fecha || null });
+                actualizarFlujo({ ...(srv?.id ? { servicioId: srv.id } : {}), recursoId: r.id, ...(e?.fecha ? { fecha: e.fecha } : {}) });
                 avanzar();
               },
-            })).concat([{ texto: "Me da igual (el primero libre)", hacer: () => { setFlujo({ servicioId: srv?.id || null, recursoId: null, fecha: e?.fecha || null }); avanzar(); } }]),
+            })).concat([{ texto: "Me da igual (el primero libre)", hacer: () => { actualizarFlujo({ ...(srv?.id ? { servicioId: srv.id } : {}), recursoId: null, ...(e?.fecha ? { fecha: e.fecha } : {}) }); avanzar(); } }]),
           ),
         600,
       );
@@ -445,7 +527,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
                   texto: `Ver horarios del ${etiquetaDia(e.fecha!)}`,
                   lleno: true,
                   hacer: () => {
-                    setFlujo({ servicioId: srv?.id || null, recursoId: e.recursoId, fecha: e.fecha });
+                    actualizarFlujo({ ...(srv?.id ? { servicioId: srv.id } : {}), ...(e.recursoId !== undefined ? { recursoId: e.recursoId } : {}), fecha: e.fecha });
                     avanzar();
                   },
                 },
@@ -501,8 +583,14 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
   /* ---------- lo que llega por la caja de texto ---------- */
   function alRecibir(raw: string) {
     const fl = flujo();
-    const e = entender(raw, F(), ahoraAR(), { espera: fl?.espera, ultimoServicioId: R.current.ultimoSrvId });
-    if (e.servicioId) R.current.ultimoSrvId = e.servicioId;
+    const e = entender(raw, F(), ahoraAR(), { espera: fl?.espera, ultimoServicioId: R.current.ultimoSrvId || mem().servicioId });
+    if (e.servicioId) {
+      R.current.ultimoSrvId = e.servicioId;
+      recordar({ servicioId: e.servicioId });
+    }
+    if (e.nombre) recordar({ nombre: e.nombre });
+    if (e.tel) recordar({ tel: e.tel });
+
     const datos =
       e.servicioId ||
       e.recursoId !== undefined ||
@@ -516,6 +604,8 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
       e.diaSiguiente ||
       e.proximaSemana ||
       e.otroRecurso ||
+      e.cambiarHora ||
+      e.cambiarServicio ||
       e.nombre ||
       e.tel;
 
@@ -524,10 +614,9 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
       if (e.afirmacion || e.confirmar) {
         const x = { ...propuesta.p };
         setPropuesta(null);
-        setFlujo(null);
         return cerrarReserva(x);
       }
-      if (e.cancelar || (e.negacion && !datos)) {
+      if (e.cancelar) {
         setPropuesta(null);
         return cancelarFlujo();
       }
@@ -537,6 +626,20 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
         setFlujo(p);
         aplicar(e);
         return avanzar(true);
+      }
+      if (e.negacion) {
+        const p = { ...propuesta.p };
+        setPropuesta(null);
+        setFlujo(p);
+        return preguntar(
+          "Dale, no te preocupes (ya guardé tus datos). ¿Qué parte querés cambiar?",
+          [
+            { texto: "Cambiar horario", lleno: true, hacer: () => { p.hora = null; setFlujo(p); avanzar(); } },
+            { texto: "Cambiar día", hacer: () => { p.fechaDescartada = p.fecha; p.fecha = null; p.hora = null; setFlujo(p); avanzar(); } },
+            ...(F().servicios.length > 1 ? [{ texto: "Cambiar servicio", hacer: () => { p.servicioId = null; p.hora = null; setFlujo(p); avanzar(); } } as Chip] : []),
+            ...(F().recursos.length > 1 ? [{ texto: "Cambiar " + F().recurso, hacer: () => { p.recursoId = undefined; p.hora = null; setFlujo(p); avanzar(); } } as Chip] : []),
+          ],
+        );
       }
     }
 
@@ -557,7 +660,8 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
     if (fl && fl.modo) {
       if (e.cancelar) return cancelarFlujo();
       if (fl.espera === "tel-gestion") {
-        if (e.tel) return buscarTurnos(e.tel);
+        const telUsar = e.tel || mem().tel;
+        if (telUsar) return buscarTurnos(telUsar);
         return preguntarG("Pasame el celular con el que sacaste " + elTurno() + " (con código de área, sin 15).", []);
       }
       bot(["Elegí una de las opciones de abajo 👇"]);
@@ -566,8 +670,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
 
     // Si estamos pidiendo celular o nombre dentro del armado del turno
     if (fl && fl.espera === "tel" && e.tel) {
-      fl.tel = e.tel;
-      if (e.nombre) fl.nombre = e.nombre;
+      aplicar(e);
       return avanzar();
     }
     if (
@@ -582,11 +685,17 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
       !e.diaSiguiente &&
       !e.proximaSemana &&
       !e.otroRecurso &&
+      !e.cambiarHora &&
+      !e.cambiarServicio &&
       !e.negacion
     ) {
-      if (e.tel) fl.tel = e.tel;
+      if (e.tel) {
+        fl.tel = e.tel;
+        recordar({ tel: e.tel });
+      }
       if (e.nombre) {
         fl.nombre = e.nombre;
+        recordar({ nombre: e.nombre });
         return avanzar();
       }
       if (!e.servicioId && !e.fecha && !e.hora && !e.franja) {
@@ -597,7 +706,9 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
             norm(limpio),
           );
         if (!parecePreguntaODuda && limpio.length >= 2 && limpio.length <= 40 && /^[A-Za-zÁÉÍÓÚÑáéíóúñü\s'.-]+$/.test(limpio)) {
-          fl.nombre = limpio.split(/\s+/).slice(0, 3).map(cap).join(" ");
+          const nom = limpio.split(/\s+/).slice(0, 3).map(cap).join(" ");
+          fl.nombre = nom;
+          recordar({ nombre: nom });
           return avanzar();
         }
         return bot(["Para dejarte agendado " + elTurno() + ", decime tu nombre y apellido (por ejemplo: “Juan Pérez”):"]);
@@ -608,8 +719,13 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
     if (e.confirmar && !fl && !(e.servicioId || e.fecha || e.hora || e.franja)) return iniciarGestion("confirmar", e.tel);
     if (e.cancelar && fl) return cancelarFlujo();
 
-    // Si en medio de elegir horario o día el cliente rechaza las opciones ("no me sirve", "ninguno de esos") sin dar otro dato
+    // Si en medio del flujo el cliente dice "no" / "ninguno" / "no me sirve" sin dar otro dato, actuamos según el paso actual sin borrar lo que ya cargó
     if (fl && e.negacion && !datos && !e.info) {
+      if (fl.espera === "recurso") {
+        fl.recursoId = null;
+        recordar({ recursoId: null });
+        return avanzar();
+      }
       if (fl.espera === "hora" && fl.fecha) {
         if (fl.franja) {
           fl.franja = null;
@@ -617,12 +733,25 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
           bot(["Dale, te muestro todos los horarios libres de ese día:"]);
           return setTimeout(() => avanzar(), 500);
         }
+        descartarFechaMem(fl.fecha);
         fl.fechaDescartada = fl.fecha;
         fl.fecha = null;
         fl.hora = null;
         fl.franja = null;
         fl.pagHora = 0;
         return avanzar();
+      }
+      if (fl.espera === "fecha") {
+        if (fl.franja) {
+          fl.franja = null;
+          bot(["Dale, busquemos en cualquier horario del día:"]);
+          return setTimeout(() => avanzar(), 500);
+        }
+        const abiertos = diasAbiertos(F());
+        if (abiertos.length > 4) {
+          fl.desdeFecha = abiertos[Math.min(4, abiertos.length - 1)];
+          return avanzar();
+        }
       }
       return cancelarFlujo();
     }
@@ -634,8 +763,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
     }
     if (e.info && !(e.turno && (e.fecha || e.hora || e.franja))) {
       if (datos) {
-        const nuevoFlujo = fl || { servicioId: e.servicioId || R.current.ultimoSrvId || null };
-        setFlujo(nuevoFlujo);
+        actualizarFlujo({});
         aplicar(e);
         return responderInfo(e.info, e, () => setTimeout(() => avanzar(), 900));
       }
@@ -644,8 +772,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
 
     const esTurno = e.turno || e.fecha || e.hora || e.franja || e.loAntesPosible || (fl && datos) || (e.servicioId && e.ganas);
     if (esTurno) {
-      const nuevoFlujo = fl || { servicioId: e.servicioId || R.current.ultimoSrvId || null };
-      setFlujo(nuevoFlujo);
+      actualizarFlujo({});
       const n = aplicar(e);
       return avanzar(n >= 2);
     }
@@ -672,8 +799,19 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
     let n = 0;
     const fi = F();
     const fl = flujo()!;
-    if (e.servicioId) { fl.servicioId = e.servicioId; fl.pagHora = 0; n++; }
-    if (e.recursoId !== undefined) { fl.recursoId = e.recursoId; fl.pagHora = 0; n++; }
+    if (e.cambiarServicio) {
+      fl.servicioId = null;
+      fl.hora = null;
+      fl.pagHora = 0;
+      n++;
+    }
+    if (e.cambiarHora) {
+      fl.hora = null;
+      fl.pagHora = 0;
+      n++;
+    }
+    if (e.servicioId) { fl.servicioId = e.servicioId; recordar({ servicioId: e.servicioId }); fl.pagHora = 0; n++; }
+    if (e.recursoId !== undefined) { fl.recursoId = e.recursoId; recordar({ recursoId: e.recursoId }); fl.pagHora = 0; n++; }
     if (e.otroRecurso) {
       if (fi.recursos.length === 2 && fl.recursoId) {
         fl.recursoId = fi.recursos.find((r) => r.id !== fl.recursoId)?.id || null;
@@ -685,7 +823,9 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
       n++;
     }
     if (e.otroDia) {
-      fl.fechaDescartada = e.fechaDescartada || fl.fecha || null;
+      const desc = e.fechaDescartada || fl.fecha || null;
+      fl.fechaDescartada = desc;
+      descartarFechaMem(desc);
       fl.fecha = null;
       fl.hora = null;
       fl.desdeFecha = null;
@@ -721,6 +861,10 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
       if (fl.fecha !== e.fecha && !e.hora) fl.hora = null;
       fl.fecha = e.fecha;
       fl.fechaDescartada = null;
+      recordar({
+        fecha: e.fecha,
+        fechasDescartadas: mem().fechasDescartadas.filter((d) => d !== e.fecha),
+      });
       fl.desdeFecha = null;
       fl.pagHora = 0;
       n++;
@@ -773,24 +917,30 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
         }
       }
     }
-    if (e.nombre) { fl.nombre = e.nombre; n++; }
-    if (e.tel) { fl.tel = e.tel; n++; }
+    if (e.nombre) { fl.nombre = e.nombre; recordar({ nombre: e.nombre }); n++; }
+    if (e.tel) { fl.tel = e.tel; recordar({ tel: e.tel }); n++; }
     return n;
   }
 
   /* ---------- el turno se arma pidiendo solo lo que falta y acercando alternativas ---------- */
-  async function iniciarTurno() { await refrescar(); setFlujo({}); avanzar(); }
+  async function iniciarTurno() {
+    await refrescar();
+    setFlujo({ nombre: mem().nombre, tel: mem().tel });
+    avanzar();
+  }
   function cancelarFlujo() { setFlujo(null); bot(["Listo, lo dejamos para otro momento 👍 Cuando quieras, acá estoy."]); setTimeout(menuChips, 500); }
   function preguntar(t: string, items: Chip[]) { bot([t]); setTimeout(() => chipsSet(items.concat([{ texto: "Cancelar", hacer: cancelarFlujo }])), 450); }
 
   /* --- cancelar, cambiar, confirmar o subir comprobante de un turno ya sacado --- */
   function preguntarG(t: string, items: Chip[]) { bot([t]); setTimeout(() => chipsSet(items.concat([{ texto: "Volver al menú", hacer: cancelarFlujo }])), 450); }
   function iniciarGestion(modo: string, tel?: string) {
-    setFlujo({ modo, espera: "tel-gestion" });
-    if (tel) return buscarTurnos(tel);
+    const telConocido = tel || flujo()?.tel || mem().tel;
+    setFlujo({ modo, espera: "tel-gestion", tel: telConocido, nombre: mem().nombre });
+    if (telConocido) return buscarTurnos(telConocido);
     preguntarG(modo === "fidelidad" ? "Dale. Pasame tu celular y me fijo cuántas visitas llevás." : "Dale. Pasame el celular con el que sacaste " + elTurno() + " y lo busco.", []);
   }
   async function mostrarFidelidad(tel: string) {
+    recordar({ tel });
     setFlujo(null);
     const r = await api<{ activa: boolean; premio: string; cada: number; visitas: number; enCurso: number; disponibles: number }>("/fidelidad?tel=" + encodeURIComponent(tel));
     if (!r.ok) { bot([esc(r.motivo || "No pude buscarlo ahora.")]); return setTimeout(menuChips, 900); }
@@ -803,16 +953,27 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
     setTimeout(menuChips, 900);
   }
   async function buscarTurnos(tel: string) {
-    const fl = flujo()!;
+    recordar({ tel });
+    const fl = flujo() || { modo: "cancelar" };
     if (fl.modo === "fidelidad") return mostrarFidelidad(tel);
     fl.tel = tel;
     const r = await api<{ turnos: Turno[] }>("/mis-turnos?tel=" + encodeURIComponent(tel));
     const ts = r.ok ? r.turnos : [];
+    if (ts[0]?.nombre) recordar({ nombre: ts[0].nombre });
     if (!ts.length) {
       setFlujo(null);
       const c = contactoChips();
       bot(["No encontré ningún " + palabra() + " pendiente con ese celular 🤔 Fijate que sea el mismo número con el que reservaste, o si querés sacamos uno nuevo ahora:"]);
-      return setTimeout(() => chipsSet([{ texto: "Sacar " + unTurno(), lleno: true, hacer: iniciarTurno } as Chip].concat(c)), 600);
+      return setTimeout(
+        () =>
+          chipsSet(
+            [
+              { texto: "Sacar " + unTurno(), lleno: true, hacer: iniciarTurno } as Chip,
+              { texto: "Probar con otro celular", hacer: () => { R.current.memoria.tel = undefined; guardarMemoriaSession(); iniciarGestion(fl.modo || "cancelar"); } } as Chip,
+            ].concat(c),
+          ),
+        600,
+      );
     }
     if (fl.modo === "confirmar" && ts.length === 1) return confirmarTurnoChat(ts[0]);
     if (ts.length === 1) {
@@ -836,11 +997,11 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
     );
   }
   function ofrecerAccion(t: Turno) {
-    const tel = flujo()?.tel || "";
+    const tel = flujo()?.tel || mem().tel || "";
     const faltaSena = t.sena && t.sena.monto > 0 && t.sena.estado === "pendiente";
     const estadoSenaTxt = t.sena?.estado === "declarada" || t.sena?.estado === "recibida" ? " · Seña enviada ✓" : faltaSena ? " · Seña pendiente (" + plata(t.sena.monto) + ")" : "";
     preguntarG(
-      "📅 <b>" + cap(etiquetaDia(t.fecha)) + " a las " + t.hora + " h</b> · " + esc(t.servicioNombre) + " con " + esc(t.recursoNombre) + estadoSenaTxt + ".\n¿Qué necesitás hacer?",
+      "📅 <b>" + cap(etiquetaDia(t.fecha)) + " a las " + t.hora + " h</b> · " + esc(t.servicioNombre) + " " + esc(prepRec(t.recursoNombre)) + estadoSenaTxt + ".\n¿Qué necesitás hacer?",
       (faltaSena ? [{ texto: "📎 Subir comprobante de seña", lleno: true, hacer: () => { setFlujo(null); pasoSena(t, tel); } } as Chip] : [])
         .concat(!t.confirmado ? [{ texto: "Confirmar que voy", hacer: () => confirmarTurnoChat(t) } as Chip] : [])
         .concat([
@@ -851,23 +1012,24 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
   }
   const accion = (id: string, tel: string, a: "cancelar" | "confirmar") => api(`/turno/${id}`, { tel, accion: a });
   async function cancelarTurnoChat(t: Turno) {
-    const tel = flujo()?.tel || ""; setFlujo(null);
+    const tel = flujo()?.tel || mem().tel || ""; setFlujo(null);
     const r = await accion(t.id, tel, "cancelar");
     if (!r.ok) { bot(["No pude cancelarlo ahora. Probá de nuevo en un rato o avisale al local."]); return setTimeout(menuChips, 900); }
     bot(["Listo, cancelé " + elTurno() + " (" + etiquetaDia(t.fecha) + " " + t.hora + " h). Ya liberé el lugar ✅\nCuando quieras, sacás otro."]);
     setTimeout(menuChips, 900);
   }
   async function cambiarTurnoChat(t: Turno) {
-    const tel = flujo()?.tel || "";
+    const tel = flujo()?.tel || mem().tel || "";
+    const nombre = t.nombre || flujo()?.nombre || mem().nombre;
     const r = await accion(t.id, tel, "cancelar");
     if (!r.ok) { setFlujo(null); bot(["No pude liberar el lugar ahora. Probá de nuevo en un rato o avisale al local."]); return setTimeout(menuChips, 900); }
     await refrescar();
-    setFlujo({ servicioId: t.servicioId, recursoId: F().recursos.some((x) => x.id === t.recursoId) ? t.recursoId : undefined, tel });
-    bot(["Dale, liberé el anterior de " + esc(t.servicioNombre) + ". Elegimos el nuevo día y horario:"]);
+    setFlujo({ servicioId: t.servicioId, recursoId: F().recursos.some((x) => x.id === t.recursoId) ? t.recursoId : undefined, nombre, tel });
+    bot(["Dale, liberé el anterior de " + esc(t.servicioNombre) + ". Elegimos el nuevo día y horario (ya tengo tus datos guardados):"]);
     setTimeout(() => avanzar(), 700);
   }
   async function confirmarTurnoChat(t: Turno) {
-    const tel = flujo()?.tel || ""; setFlujo(null);
+    const tel = flujo()?.tel || mem().tel || ""; setFlujo(null);
     const r = await accion(t.id, tel, "confirmar");
     if (!r.ok) { bot(["No pude confirmarlo ahora. Probá de nuevo en un rato."]); return setTimeout(menuChips, 900); }
     bot(["¡Listo, quedó confirmado! Te esperamos 🙌\n" + cap(etiquetaDia(t.fecha)) + " a las " + t.hora + " h (" + esc(t.servicioNombre) + ")."]);
@@ -909,6 +1071,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
           hacer: () => {
             R.current.ultimoSrvId = s.id;
             fl.servicioId = s.id;
+            recordar({ servicioId: s.id });
             avanzar();
           },
         })),
@@ -923,8 +1086,8 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
       return preguntar(
         pre + (lugar ? "¿Tenés preferencia de " + esc(fi.recurso) + "?" : "¿Con quién te gustaría atenderte?"),
         fi.recursos
-          .map((r) => ({ texto: r.nombre, hacer: () => { fl.recursoId = r.id; avanzar(); } }))
-          .concat([{ texto: "Me da igual (el primero libre)", hacer: () => { fl.recursoId = null; avanzar(); } }]),
+          .map((r) => ({ texto: r.nombre, hacer: () => { fl.recursoId = r.id; recordar({ recursoId: r.id }); avanzar(); } }))
+          .concat([{ texto: "Me da igual (el primero libre)", hacer: () => { fl.recursoId = null; recordar({ recursoId: null }); avanzar(); } }]),
       );
     }
 
@@ -961,7 +1124,11 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
       fl.fechaDescartada = null;
       const abiertosBase = diasAbiertos(fi);
       const abiertos = fl.desdeFecha ? abiertosBase.filter((d) => d >= fl.desdeFecha!) : abiertosBase;
-      const listaDias = (abiertos.length ? abiertos : abiertosBase).filter((d) => d !== descartada);
+      const baseDias = abiertos.length ? abiertos : abiertosBase;
+      const descartadasSet = new Set(mem().fechasDescartadas || []);
+      if (descartada) descartadasSet.add(descartada);
+      const filtrados = baseDias.filter((d) => !descartadasSet.has(d));
+      const listaDias = filtrados.length ? filtrados : baseDias.filter((d) => d !== descartada);
       const dias = listaDias.filter((d) => libresDe(d, srv, rid).some((h) => enFranja(h.hora, fl.franja))).slice(0, 8);
       if (!dias.length) {
         // Si no hay lugar con ese profesional o en esa franja, buscamos alternativas (otro profesional u otra franja)
@@ -1049,7 +1216,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
               texto: h.hora + (nomRec && otroEnMismaHora ? ` ${prepRec(nomRec)}` : ""),
               hacer: () => { fl.hora = h.hora; avanzar(); },
             })),
-            { texto: "Elegir otro día", hacer: () => { fl.fecha = null; fl.hora = null; avanzar(); } },
+            { texto: "Elegir otro día", hacer: () => { descartarFechaMem(fl.fecha); fl.fechaDescartada = fl.fecha; fl.fecha = null; fl.hora = null; avanzar(); } },
           ],
         );
       }
@@ -1102,7 +1269,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
             `. Te dejo los últimos de ese día o podemos mirar otro día:`,
           [
             ...ultimos.map((h) => ({ texto: h.hora, lleno: h.hora === ultimo.hora, hacer: () => { fl.hora = h.hora; avanzar(); } })),
-            { texto: "Elegir otro día", hacer: () => { fl.fecha = null; fl.hora = null; fl.pagHora = 0; avanzar(); } },
+            { texto: "Elegir otro día", hacer: () => { descartarFechaMem(fl.fecha); fl.fechaDescartada = fl.fecha; fl.fecha = null; fl.hora = null; fl.pagHora = 0; avanzar(); } },
           ],
         );
       }
@@ -1126,11 +1293,13 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
           ...(hs.length > TAM_PAG && hayTarde ? [{ texto: "☀️ Tarde", hacer: () => { fl.franja = [13 * 60, 19 * 60 + 30, "a la tarde"]; fl.pagHora = 0; avanzar(); } } as Chip] : []),
           ...(hs.length > TAM_PAG && hayNoche ? [{ texto: "🌙 Noche", hacer: () => { fl.franja = [18 * 60 + 30, 24 * 60, "a la noche"]; fl.pagHora = 0; avanzar(); } } as Chip] : []),
           ...(fl.franja ? [{ texto: "Ver todo el día", hacer: () => { fl.franja = null; fl.pagHora = 0; avanzar(); } } as Chip] : []),
-          { texto: "Otro día", hacer: () => { fl.fechaDescartada = fl.fecha; fl.fecha = null; fl.hora = null; fl.pagHora = 0; avanzar(); } },
+          { texto: "Otro día", hacer: () => { descartarFechaMem(fl.fecha); fl.fechaDescartada = fl.fecha; fl.fecha = null; fl.hora = null; fl.pagHora = 0; avanzar(); } },
         ],
       );
     }
 
+    if (!fl.nombre && mem().nombre) fl.nombre = mem().nombre;
+    if (!fl.tel && mem().tel) fl.tel = mem().tel;
     if (!fl.nombre) { fl.espera = "nombre"; return bot([pre + "Buenísimo. ¿A nombre de quién lo anoto?"]); }
     if (!fl.tel) { fl.espera = "tel"; return bot([pre + "Gracias, " + esc(fl.nombre) + ". ¿Me pasás tu celular para agendarte y mandarte el recordatorio?"]); }
     fl.espera = "confirmar";
@@ -1162,14 +1331,25 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
   }
 
   async function cerrarReserva(p: Flujo) {
+    if (p.nombre || p.tel) recordar({ nombre: p.nombre || mem().nombre, tel: p.tel || mem().tel });
     const r = await api<{ t: Turno }>("/reservar", { servicioId: p.servicioId, recursoId: p.recursoId || null, fecha: p.fecha, hora: p.hora, nombre: p.nombre, tel: p.tel });
     if (!r.ok) {
+      const m = (r.motivo || "").toLowerCase();
       bot([esc(r.motivo || "No se pudo guardar el turno.")]);
       await refrescar();
-      setFlujo({ ...p, hora: null });
+      if (m.includes("celular") || m.includes("teléfono") || m.includes("telefono")) {
+        recordar({ tel: undefined });
+        setFlujo({ ...p, tel: undefined });
+      } else if (m.includes("día") || m.includes("dia")) {
+        setFlujo({ ...p, fecha: null, hora: null });
+      } else {
+        setFlujo({ ...p, hora: null });
+      }
       return setTimeout(() => avanzar(), 700);
     }
     const t = r.t;
+    recordar({ ultimoTurno: t, nombre: p.nombre || t.nombre, tel: p.tel || t.tel, servicioId: t.servicioId, recursoId: t.recursoId });
+    setFlujo(null);
     if (t.sena && t.sena.estado === "pendiente") {
       bot([{ html: "📝 Te lo tomo: <b>" + esc(t.servicioNombre) + "</b> · " + etiquetaDia(t.fecha) + " a las " + t.hora + " h con " + esc(t.recursoNombre) + "." }]);
       return setTimeout(() => pasoSena(t, p.tel || ""), 850);
@@ -1412,10 +1592,10 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
                 <span className="nota">A nombre de {prop.p.nombre} · {prop.p.tel}</span>
               </div>
               <div className="acc">
-                <button type="button" className="chip lleno" onClick={() => { const x = { ...prop.p }; setPropuesta(null); burbuja("yo", "Confirmar"); setFlujo(null); cerrarReserva(x); }}>Confirmar</button>
-                <button type="button" className="chip" onClick={() => { setPropuesta(null); burbuja("yo", "Cambiar día u hora"); prop.p.fecha = null; prop.p.hora = null; prop.p.franja = null; avanzar(); }}>Cambiar día u hora</button>
+                <button type="button" className="chip lleno" onClick={() => { const x = { ...prop.p }; setPropuesta(null); burbuja("yo", "Confirmar"); cerrarReserva(x); }}>Confirmar</button>
+                <button type="button" className="chip" onClick={() => { setPropuesta(null); burbuja("yo", "Cambiar día u hora"); setFlujo({ ...prop.p, fecha: null, hora: null, franja: null }); avanzar(); }}>Cambiar día u hora</button>
                 {F().servicios.length > 1 && (
-                  <button type="button" className="chip" onClick={() => { setPropuesta(null); burbuja("yo", "Cambiar servicio"); prop.p.servicioId = null; prop.p.hora = null; avanzar(); }}>Cambiar servicio</button>
+                  <button type="button" className="chip" onClick={() => { setPropuesta(null); burbuja("yo", "Cambiar servicio"); setFlujo({ ...prop.p, servicioId: null, hora: null }); avanzar(); }}>Cambiar servicio</button>
                 )}
                 <button type="button" className="chip" onClick={() => { setPropuesta(null); burbuja("yo", "Cancelar"); cancelarFlujo(); }}>Cancelar</button>
               </div>

@@ -118,6 +118,8 @@ export type Entendido = {
   diaSiguiente?: boolean;
   proximaSemana?: boolean;
   otroRecurso?: boolean;
+  cambiarHora?: boolean;
+  cambiarServicio?: boolean;
   nombre?: string;
   tel?: string;
   cancelarTurno?: boolean;
@@ -143,9 +145,19 @@ function ajustarAmPm(h: number, mi: number, t: string, f: Ficha, fecha?: string,
 }
 
 export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: ContextoEntender): Entendido {
-  const toks = palabras(raw);
-  const t = " " + toks.join(" ") + " ";
   const e: Entendido = { info: null };
+  let rawSinTel = raw;
+  const mTel = raw.match(/\+?\(?0?\d[\d\s.()-]{6,}\d/);
+  if (mTel) {
+    const dig = mTel[0].replace(/\D/g, "");
+    if (dig.length >= 8 && dig.length <= 15) {
+      e.tel = mTel[0].trim();
+      rawSinTel = raw.replace(mTel[0], " ");
+    }
+  }
+
+  const toks = palabras(rawSinTel);
+  const t = " " + toks.join(" ") + " ";
   const hay = (...ks: string[]) => ks.some((k) => t.includes(k));
   const recNorm = norm(f.recurso || "profesional");
 
@@ -165,7 +177,14 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
       " no me sirve ", " no me sirven ", " no me queda ", " no me quedan ",
       " no puedo a esa hora ", " no puedo en ese horario ", " no puedo ese dia ",
       " ninguno de esos ", " ninguna de esas ", " esos horarios no ", " a esa hora no ",
+      " esta mal ", " me equivoque ", " le erre ",
     );
+  if (hay(" cambiar hora ", " cambiar la hora ", " cambiar horario ", " cambiar el horario ", " otro horario ", " otra hora ", " a otra hora ", " en otro horario ")) {
+    e.cambiarHora = true;
+  }
+  if (hay(" cambiar servicio ", " cambiar el servicio ", " otro servicio ")) {
+    e.cambiarServicio = true;
+  }
 
   // 2) Desplazamientos relativos de horario ("más tarde", "más temprano") y de día/recurso
   if (
@@ -291,7 +310,7 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
   } else if (hayPos(" este finde ", " el finde ", " fin de semana ")) {
     const offSab = (6 - hoy.getDay() + 7) % 7;
     e.fecha = mas(offSab);
-  } else if ((m = norm(raw).match(/\b(\d{1,2})[\/-](\d{1,2})\b/))) {
+  } else if ((m = norm(rawSinTel).match(/\b(\d{1,2})[\/-](\d{1,2})\b/))) {
     const d = new Date(hoy.getFullYear(), +m[2] - 1, +m[1]);
     if (d < hoy) d.setFullYear(d.getFullYear() + 1);
     e.fecha = iso(d);
@@ -332,7 +351,7 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
         e.franja = [h1 * 60, h2 * 60, `entre las ${aHora(h1 * 60)} y las ${aHora(h2 * 60)}`];
       }
     }
-  } else if ((m = norm(raw).match(/\b(\d{1,2})[:.](\d{2})\b/))) {
+  } else if ((m = norm(rawSinTel).match(/\b(\d{1,2})[:.](\d{2})\b/))) {
     h = +m[1]; mi = +m[2];
   } else if ((m = tPos.match(/ (?:a las |las |tipo |^ )(\d{1,2}) (00|15|20|30|40|45) /)) && +m[1] >= 1 && +m[1] <= 23) {
     h = +m[1]; mi = +m[2];
@@ -415,16 +434,12 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
   }
 
   // 8) Nombre y celular (admite espacios, guiones, puntos y paréntesis)
-  if ((m = raw.match(/(?:me llamo|mi nombre es|a nombre de|soy|anotame como)\s+([A-Za-zÁÉÍÓÚÑáéíóúñü]{2,}(?:\s+[A-Za-zÁÉÍÓÚÑáéíóúñü]{2,})?)/i))) {
+  if ((m = rawSinTel.match(/(?:me llamo|mi nombre es|a nombre de|soy|anotame como)\s+([A-Za-zÁÉÍÓÚÑáéíóúñü]{2,}(?:\s+[A-Za-zÁÉÍÓÚÑáéíóúñü]{2,})?)/i))) {
     const n = m[1].trim();
     if (!/^(de|el|la|un|una|nuevo|nueva|cliente)\b/i.test(n)) e.nombre = cap(n.split(/\s+/).map(cap).join(" "));
   }
-  if ((m = raw.match(/\+?\(?0?\d[\d\s.()-]{6,}\d/))) {
-    const dig = m[0].replace(/\D/g, "");
-    if (dig.length >= 8 && dig.length <= 15) e.tel = m[0].trim();
-  }
-  if (!e.nombre && ctx?.espera === "nombre" && e.tel) {
-    const sinTel = raw.replace(/\+?\(?0?\d[\d\s.()-]{6,}\d/g, "").replace(/[,.;:-]+/g, " ").replace(/^(soy|me llamo|mi nombre es|a nombre de)\s+/i, "").trim();
+  if (!e.nombre && (ctx?.espera === "nombre" || ctx?.espera === "tel") && e.tel) {
+    const sinTel = rawSinTel.replace(/[,.;:-]+/g, " ").replace(/^(soy|me llamo|mi nombre es|a nombre de)\s+/i, "").trim();
     if (/^[A-Za-zÁÉÍÓÚÑáéíóúñü]{2,}(\s+[A-Za-zÁÉÍÓÚÑáéíóúñü]{2,})?$/.test(sinTel)) {
       e.nombre = sinTel.split(/\s+/).map(cap).join(" ");
     }
@@ -459,11 +474,11 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
       " turno", " reserv", " agend", " cita ", " sacar", " sacame", " anotame", " anotar",
       " lugar ", " disponib", " tenes algo ", " tienen algo ", " hay algo ", " hueco ",
       " puedo ir ", " me atienden ", " atenderme ", " cortarme ", " jugar ", " mesa para ",
-    ) || e.loAntesPosible || e.masTarde || e.masTemprano || e.otroDia || e.diaSiguiente || e.proximaSemana || e.otroRecurso;
+    ) || e.loAntesPosible || e.masTarde || e.masTemprano || e.otroDia || e.diaSiguiente || e.proximaSemana || e.otroRecurso || e.cambiarHora || e.cambiarServicio;
   e.ganas = hay(" quiero ", " queria ", " quisiera ", " me gustaria ", " necesito ", " quiero hacerme ", " vengo a ", " busco ", " para hacerme ");
 
   const tieneFiltroAgenda = Boolean(
-    e.fecha || e.hora || e.franja || e.masTarde || e.masTemprano || e.otroDia || e.diaSiguiente || e.proximaSemana || e.otroRecurso || e.recursoId !== undefined,
+    e.fecha || e.hora || e.franja || e.masTarde || e.masTemprano || e.otroDia || e.diaSiguiente || e.proximaSemana || e.otroRecurso || e.cambiarHora || e.cambiarServicio || e.recursoId !== undefined,
   );
 
   if (
