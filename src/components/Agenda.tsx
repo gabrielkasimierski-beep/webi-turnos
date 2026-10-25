@@ -38,6 +38,41 @@ function sonarAviso(tipo: "turno" | "sena" = "turno") {
   } catch { /* audio bloqueado hasta interacción */ }
 }
 
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+/** Registra la suscripción Web Push (VAPID) en el servidor para que lleguen notificaciones aún con el navegador en segundo plano o pantalla bloqueada. */
+async function suscribirWebPush(enviarTest: boolean): Promise<boolean> {
+  try {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+    const reg = await navigator.serviceWorker.register("/sw.js");
+    await navigator.serviceWorker.ready;
+    const rKey = await fetch("/api/panel/push", { cache: "no-store" }).then((x) => x.json());
+    if (!rKey?.ok || !rKey.publicKey) return false;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(rKey.publicKey),
+      });
+    }
+    const rSave = await fetch("/api/panel/push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription: sub.toJSON(), test: enviarTest }),
+    }).then((x) => x.json());
+    return Boolean(rSave?.ok);
+  } catch {
+    return false;
+  }
+}
+
 /** Dispara notificación nativa del sistema / celular mediante Service Worker (o Notification API directa). */
 async function dispararPushLocal(titulo: string, cuerpo: string, tag: string) {
   try {
@@ -94,15 +129,24 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if ("Notification" in window) setPermisoPush(Notification.permission);
-    if ("serviceWorker" in navigator) {
+    if ("Notification" in window) {
+      setPermisoPush(Notification.permission);
+      if (Notification.permission === "granted") {
+        suscribirWebPush(false).catch(() => {});
+      }
+    } else if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
-  }, []);
+  }, [ficha.slug]);
 
   async function activarNotificaciones() {
     if (typeof window === "undefined" || !("Notification" in window)) {
-      setAvisoVivo("Este navegador no soporta notificaciones nativas, pero el aviso sonoro en pantalla está activo.");
+      const esIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      setAvisoVivo(
+        esIOS
+          ? "📲 En iPhone: tocá el botón Compartir de Safari → 'Agregar a pantalla de inicio' y abrí el panel desde ahí para recibir notificaciones."
+          : "Este navegador no soporta notificaciones nativas, pero el aviso sonoro en pantalla está activo.",
+      );
       sonarAviso("sena");
       return;
     }
@@ -111,12 +155,15 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
       setPermisoPush(p);
       if (p === "granted") {
         sonarAviso("sena");
-        await dispararPushLocal(
-          "🔔 Notificaciones activadas · " + ficha.nombre,
-          "Te vamos a avisar con sonido y notificación apenas entre un " + palabra + " o un comprobante de seña.",
-          "webi-test-" + Date.now(),
-        );
-        setAvisoVivo("¡Listo! Ya tenés activadas las notificaciones y el sonido en este dispositivo.");
+        const pushOk = await suscribirWebPush(true);
+        if (!pushOk) {
+          await dispararPushLocal(
+            "🔔 Notificaciones activadas · " + ficha.nombre,
+            "Te vamos a avisar con sonido y notificación apenas entre un " + palabra + " o un comprobante de seña.",
+            "webi-test-" + Date.now(),
+          );
+        }
+        setAvisoVivo(`¡Listo! Este celular ya está vinculado a ${ficha.nombre} para recibir notificaciones en segundo plano.`);
       } else {
         setAvisoVivo("Permiso bloqueado en el navegador. Habilitalo desde el candadito de la barra de direcciones.");
       }
@@ -135,16 +182,19 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
             if (!ant && t.estado === "pendiente") {
               const msg = `📅 Nuevo ${palabra}: ${t.nombre || "Cliente"} · ${etiquetaDia(t.fecha)} ${t.hora} h (${t.servicioNombre})`;
               setAvisoVivo(msg);
+              setDia(t.fecha);
               sonarAviso("turno");
               dispararPushLocal(`📅 Nuevo ${palabra} en ${ficha.nombre}`, `${t.nombre || "Cliente"} · ${etiquetaDia(t.fecha)} a las ${t.hora} h (${t.servicioNombre})`, "turno-" + t.id);
             } else if (ant && ant.sena?.estado !== "declarada" && t.sena?.estado === "declarada") {
               const msg = `✅ ¡Seña verificada! ${t.nombre || "Cliente"} transfirió ${plata(t.sena.monto)} (${etiquetaDia(t.fecha)} ${t.hora} h)`;
               setAvisoVivo(msg);
+              setDia(t.fecha);
               sonarAviso("sena");
               dispararPushLocal(`✅ Seña verificada · ${plata(t.sena.monto)}`, `${t.nombre || "Cliente"} subió el comprobante para ${etiquetaDia(t.fecha)} a las ${t.hora} h`, "sena-" + t.id);
             } else if (ant && !ant.confirmado && t.confirmado) {
               const msg = `👍 ${t.nombre || "Cliente"} confirmó asistencia (${etiquetaDia(t.fecha)} ${t.hora} h)`;
               setAvisoVivo(msg);
+              setDia(t.fecha);
               sonarAviso("turno");
               dispararPushLocal(`👍 Asistencia confirmada`, `${t.nombre || "Cliente"} confirmó su ${palabra} del ${etiquetaDia(t.fecha)} a las ${t.hora} h`, "conf-" + t.id);
             } else if (ant && ant.estado !== "cancelado" && t.estado === "cancelado") {
@@ -162,10 +212,26 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
     } catch { /* sin conexión: queda lo que había */ }
   }, [ficha.nombre, palabra]);
 
-  // "en vivo": se vuelve a pedir cada 12 s y al volver a la pestaña
+  // "en vivo": se vuelve a pedir cada 4 s, al volver a la pestaña y al instante cuando entra un Web Push
   useEffect(() => {
-    cargar(); const i = setInterval(cargar, 12000); const v = () => { if (!document.hidden) cargar(); };
-    document.addEventListener("visibilitychange", v); return () => { clearInterval(i); document.removeEventListener("visibilitychange", v); };
+    cargar();
+    const i = setInterval(cargar, 4000);
+    const v = () => { if (!document.hidden) cargar(); };
+    const onMsg = (ev: MessageEvent) => {
+      if (ev.data?.tipo === "push-recibido") {
+        sonarAviso(ev.data?.payload?.tag?.startsWith("sena-") ? "sena" : "turno");
+        cargar();
+      }
+    };
+    document.addEventListener("visibilitychange", v);
+    window.addEventListener("focus", v);
+    if ("serviceWorker" in navigator) navigator.serviceWorker.addEventListener("message", onMsg);
+    return () => {
+      clearInterval(i);
+      document.removeEventListener("visibilitychange", v);
+      window.removeEventListener("focus", v);
+      if ("serviceWorker" in navigator) navigator.serviceWorker.removeEventListener("message", onMsg);
+    };
   }, [cargar]);
 
   async function cambiar(id: string, cambios: Record<string, unknown>) {
