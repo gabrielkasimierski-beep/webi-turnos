@@ -109,6 +109,7 @@ export type Entendido = {
   recursoId?: string | null;
   franja?: [number, number, string];
   fecha?: string;
+  fechaDescartada?: string;
   hora?: string;
   loAntesPosible?: boolean;
   masTarde?: boolean;
@@ -147,6 +148,12 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
   const e: Entendido = { info: null };
   const hay = (...ks: string[]) => ks.some((k) => t.includes(k));
   const recNorm = norm(f.recurso || "profesional");
+
+  // Si hay una cláusula negada seguida de un conector adversativo ("no puedo mañana, mejor el viernes"), nos quedamos con la parte positiva para extraer día/hora
+  const mPivot = t.match(/^ (.+?) (?:pero|mejor|sino|prefiero|recien|mas vale) (.+) $/);
+  const tPos = mPivot && / (no|imposible|tampoco) /.test(" " + mPivot[1] + " ") ? " " + mPivot[2] + " " : t;
+  const toksPos = tPos === t ? toks : tPos.trim().split(/\s+/).filter(Boolean);
+  const hayPos = (...ks: string[]) => ks.some((k) => tPos.includes(k));
 
   // 1) Afirmaciones y negaciones (incluyendo rechazos contextuales como "no me sirve", "no puedo a esa hora")
   e.afirmacion =
@@ -197,7 +204,7 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
   f.servicios.forEach((s) => {
     [s.nombre].concat(String(s.alias || "").split(",")).forEach((c) => {
       if (!c.trim()) return;
-      const n = calza(toks, c);
+      const n = calza(toksPos, c);
       if (n > mejorSrv) {
         mejorSrv = n;
         e.servicioId = s.id;
@@ -207,7 +214,7 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
 
   // 4) Persona o recurso (profesional, cancha, mesa, box)
   if (
-    hay(
+    hayPos(
       " me da igual ", " cualquiera ", " quien sea ", " el que haya ", " la que haya ",
       " el que este ", " la que este ", " indistinto ", " da igual ", " sin preferencia ",
       " el primero que pueda ", " quien tenga lugar ",
@@ -215,7 +222,7 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
   ) {
     e.recursoId = null;
   } else if (
-    hay(
+    hayPos(
       " con otro ", " con otra ", " otro barbero ", " otro peluquero ", " otro profesional ",
       " otra chica ", " otro chico ", " otra cancha ", " otra mesa ", " otro box ",
       ` otro ${recNorm} `, ` otra ${recNorm} `,
@@ -225,9 +232,9 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
   } else {
     let mejorRec = 0;
     f.recursos.forEach((r) => {
-      const n = calza(toks, r.nombre);
+      const n = calza(toksPos, r.nombre);
       const rn = palabras(r.nombre);
-      const corto = rn.some((p) => p.length >= 2 && toks.some((w) => w === p || (p.length >= 3 && w.startsWith(p))));
+      const corto = rn.some((p) => p.length >= 2 && toksPos.some((w) => w === p || (p.length >= 3 && w.startsWith(p))));
       const score = Math.max(n, corto ? 11 : 0);
       if (score > mejorRec) {
         mejorRec = score;
@@ -237,34 +244,34 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
   }
 
   // 5) Franja horaria del día
-  if (/ (a|por|de) la manana /.test(t) || hay(" temprano ", " tempranito ", " primera hora ", " al abrir ") && !e.masTarde) {
+  if (/ (a|por|de) la manana /.test(tPos) || (hayPos(" temprano ", " tempranito ", " primera hora ", " al abrir ") && !e.masTarde)) {
     e.franja = [0, 13 * 60, "a la mañana"];
-  } else if (hay(" mediodia ", " al mediodia ", " siesta ", " a la siesta ")) {
+  } else if (hayPos(" mediodia ", " al mediodia ", " siesta ", " a la siesta ")) {
     e.franja = [12 * 60, 15 * 60 + 30, "al mediodía"];
-  } else if (/ (a|por|de|esta) la tarde /.test(t) || hay(" esta tarde ", " tardecita ", " despues del laburo ", " saliendo de trabajar ")) {
+  } else if (/ (a|por|de|esta) la tarde /.test(tPos) || hayPos(" esta tarde ", " tardecita ", " despues del laburo ", " saliendo de trabajar ")) {
     e.franja = [13 * 60, 20 * 60 + 30, "a la tarde"];
-  } else if (/ (a|por|de) la noche /.test(t) || hay(" esta noche ", " ultima hora ", " a ultima hora ", " a la nochecita ")) {
+  } else if (/ (a|por|de) la noche /.test(tPos) || hayPos(" esta noche ", " ultima hora ", " a ultima hora ", " a la nochecita ")) {
     e.franja = [18 * 60 + 30, 24 * 60, "a la noche"];
   }
 
   // Urgencia / lo antes posible
-  if (hay(" lo antes posible ", " cuanto antes ", " ahora ", " ya mismo ", " hoy mismo ", " el proximo libre ", " lo mas pronto ", " urgente ")) {
+  if (hayPos(" lo antes posible ", " cuanto antes ", " ahora ", " ya mismo ", " hoy mismo ", " el proximo libre ", " lo mas pronto ", " urgente ")) {
     e.loAntesPosible = true;
   }
 
   // 6) Día
   const hoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
   const mas = (n: number) => { const d = new Date(hoy); d.setDate(d.getDate() + n); return iso(d); };
-  const sinFranja = t.replace(/ (a|por|de) la manana /g, " ");
+  const sinFranja = tPos.replace(/ (a|por|de) la manana /g, " ");
   let m: RegExpMatchArray | null;
 
   if (/ pasado manana /.test(sinFranja)) {
     e.fecha = mas(2);
   } else if (/ manana /.test(sinFranja)) {
     e.fecha = mas(1);
-  } else if (/ hoy /.test(t)) {
+  } else if (/ hoy /.test(tPos)) {
     e.fecha = mas(0);
-  } else if (hay(" este finde ", " el finde ", " fin de semana ")) {
+  } else if (hayPos(" este finde ", " el finde ", " fin de semana ")) {
     const offSab = (6 - hoy.getDay() + 7) % 7;
     e.fecha = mas(offSab);
   } else if ((m = norm(raw).match(/\b(\d{1,2})[\/-](\d{1,2})\b/))) {
@@ -273,9 +280,9 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
     e.fecha = iso(d);
   } else {
     for (const [n, i] of Object.entries(DIA_NOM)) {
-      if (toks.some((w) => (n.length <= 3 ? w === n : igual(w, n)))) {
+      if (toksPos.some((w) => (n.length <= 3 ? w === n : igual(w, n)))) {
         let off = (i - hoy.getDay() + 7) % 7;
-        if ((off === 0 && hay(" proximo ", " que viene ", " siguiente ")) || e.proximaSemana) {
+        if ((off === 0 && hayPos(" proximo ", " que viene ", " siguiente ")) || e.proximaSemana) {
           if (off === 0) off = 7;
           else if (e.proximaSemana && off < 7) off += 7;
         }
@@ -284,7 +291,7 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
       }
     }
   }
-  if (!e.fecha && (m = t.match(/ el (\d{1,2}) (?!hs |h |horas |y )/))) {
+  if (!e.fecha && (m = tPos.match(/ el (\d{1,2}) (?!hs |h |horas |y )/))) {
     const n = +m[1];
     if (n >= 1 && n <= 31) {
       const d = new Date(hoy.getFullYear(), hoy.getMonth(), n);
@@ -297,12 +304,12 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
   const regRango = new RegExp(` (?:entre las|entre|de las|de|desde las) (${PAT_HORA}) (?:y las|y|a las|a|hasta las|hasta) (${PAT_HORA}) `);
   let h: number | null = null, mi = 0, tipo = "exacta";
 
-  if ((m = t.match(regRango))) {
+  if ((m = tPos.match(regRango))) {
     let h1 = NUM_PAL[m[1]] || +m[1];
     let h2 = NUM_PAL[m[2]] || +m[2];
     if (h1 < 24 && h2 <= 24) {
-      h1 = ajustarAmPm(h1, 0, t, f, e.fecha, e.franja);
-      h2 = ajustarAmPm(h2, 0, t, f, e.fecha, e.franja);
+      h1 = ajustarAmPm(h1, 0, tPos, f, e.fecha, e.franja);
+      h2 = ajustarAmPm(h2, 0, tPos, f, e.fecha, e.franja);
       if (h2 <= h1 && h2 + 12 <= 24) h2 += 12;
       if (h2 > h1) {
         e.franja = [h1 * 60, h2 * 60, `entre las ${aHora(h1 * 60)} y las ${aHora(h2 * 60)}`];
@@ -310,10 +317,10 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
     }
   } else if ((m = norm(raw).match(/\b(\d{1,2})[:.](\d{2})\b/))) {
     h = +m[1]; mi = +m[2];
-  } else if ((m = t.match(/ (?:a las |las |tipo |^ )(\d{1,2}) (00|15|20|30|40|45) /)) && +m[1] >= 1 && +m[1] <= 23) {
+  } else if ((m = tPos.match(/ (?:a las |las |tipo |^ )(\d{1,2}) (00|15|20|30|40|45) /)) && +m[1] >= 1 && +m[1] <= 23) {
     h = +m[1]; mi = +m[2];
   } else if (
-    (m = t.match(
+    (m = tPos.match(
       new RegExp(` (a las|las|tipo|como a las|a eso de las|cerca de las|despues de las|desde las|a partir de las|antes de las|hasta las) (${PAT_HORA})( y media| y cuarto| y treinta| y quince| menos cuarto)? `),
     ))
   ) {
@@ -324,24 +331,59 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
     }
     if (/despues|desde|partir/.test(m[1])) tipo = "desde";
     if (/antes|hasta/.test(m[1])) tipo = "hasta";
-  } else if ((m = t.match(/ (\d{1,2}|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce) y (media|cuarto|treinta|quince) /))) {
+  } else if ((m = tPos.match(/ (\d{1,2}|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce) y (media|cuarto|treinta|quince) /))) {
     h = NUM_PAL[m[1]] || +m[1];
     mi = /media|treinta/.test(m[2]) ? 30 : 15;
-  } else if ((m = t.match(/ (\d{1,2}) ?(hs|h|horas|pm|am) /))) {
+  } else if ((m = tPos.match(/ (\d{1,2}) ?(hs|h|horas|pm|am) /))) {
     h = +m[1];
     if (m[2] === "pm" && h < 12) h += 12;
-  } else if (ctx?.espera === "hora" && (m = t.match(/^ (\d{1,2}|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce) $/))) {
+  } else if (ctx?.espera === "hora" && (m = tPos.match(/^ (\d{1,2}|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce) $/))) {
     h = NUM_PAL[m[1]] || +m[1];
-  } else if (ctx?.espera === "hora" && (m = t.match(/^ (\d{1,2}) (00|15|20|30|40|45) $/))) {
+  } else if (ctx?.espera === "hora" && (m = tPos.match(/^ (\d{1,2}) (00|15|20|30|40|45) $/))) {
     h = +m[1]; mi = +m[2];
   }
 
   if (h != null && h < 24) {
-    h = ajustarAmPm(h, mi, t, f, e.fecha, e.franja);
+    h = ajustarAmPm(h, mi, tPos, f, e.fecha, e.franja);
     const min = h * 60 + mi;
     if (tipo === "desde") e.franja = [min, 24 * 60, "desde las " + aHora(min)];
     else if (tipo === "hasta") e.franja = [0, min, "antes de las " + aHora(min)];
     else e.hora = aHora(min);
+  }
+
+  // 7b) Si toda la frase es un rechazo sobre el día, la franja, la hora o el recurso ("no puedo mañana", "mañana no", "a las 5 no puedo")
+  const esPreguntaNo = hay(" no tenes ", " no tienen ", " no hay ", " no te queda ", " no quedan ", " no abren ", " no atienden ", " no trabajan ");
+  const esRechazo =
+    !esPreguntaNo &&
+    !mPivot &&
+    (hay(" no puedo ", " no me sirve ", " no me queda ", " no llego ", " imposible ", " descart", " no quiero ") ||
+      / no (hoy|manana|pasado|el |este |a la |a las |con |en )/.test(t) ||
+      / (hoy|manana|lunes|martes|miercoles|jueves|viernes|sabado|domingo|finde|tarde|noche) no /.test(t));
+
+  if (esRechazo) {
+    if (e.fecha) {
+      e.fechaDescartada = e.fecha;
+      e.fecha = undefined;
+      e.otroDia = true;
+      e.negacion = true;
+    }
+    if (e.hora) {
+      e.hora = undefined;
+      e.negacion = true;
+    }
+    if (e.franja) {
+      if (e.franja[0] === 0) {
+        e.franja = [13 * 60, 24 * 60, "a la tarde"];
+        e.masTarde = true;
+      } else {
+        e.franja = [0, 13 * 60, "a la mañana"];
+        e.masTemprano = true;
+      }
+    }
+    if (e.recursoId) {
+      e.recursoId = undefined;
+      e.otroRecurso = true;
+    }
   }
 
   // 8) Nombre y celular (admite espacios, guiones, puntos y paréntesis)

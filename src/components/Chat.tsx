@@ -44,6 +44,7 @@ type Flujo = {
   servicioId?: string | null;
   recursoId?: string | null;
   fecha?: string | null;
+  fechaDescartada?: string | null;
   hora?: string | null;
   franja?: Franja | null;
   pagHora?: number;
@@ -573,13 +574,12 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
     // Si en medio de elegir horario o día el cliente rechaza las opciones ("no me sirve", "ninguno de esos") sin dar otro dato
     if (fl && e.negacion && !datos && !e.info) {
       if (fl.espera === "hora" && fl.fecha) {
-        const diaActual = etiquetaDia(fl.fecha);
+        fl.fechaDescartada = fl.fecha;
         fl.fecha = null;
         fl.hora = null;
         fl.franja = null;
         fl.pagHora = 0;
-        bot([`Dale, descartamos ${diaActual.toLowerCase()}. Busquemos otro día que te quede mejor:`]);
-        return setTimeout(() => avanzar(), 600);
+        return avanzar();
       }
       return cancelarFlujo();
     }
@@ -629,6 +629,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
       n++;
     }
     if (e.otroDia) {
+      fl.fechaDescartada = e.fechaDescartada || fl.fecha || null;
       fl.fecha = null;
       fl.hora = null;
       fl.desdeFecha = null;
@@ -643,6 +644,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
       } else if (abiertos.length > 1) {
         fl.fecha = abiertos[1];
       }
+      fl.fechaDescartada = null;
       fl.hora = null;
       fl.pagHora = 0;
       n++;
@@ -654,6 +656,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
       const lunIso = `${lun.getFullYear()}-${String(lun.getMonth() + 1).padStart(2, "0")}-${String(lun.getDate()).padStart(2, "0")}`;
       fl.desdeFecha = lunIso;
       fl.fecha = null;
+      fl.fechaDescartada = null;
       fl.hora = null;
       fl.pagHora = 0;
       n++;
@@ -661,6 +664,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
     if (e.fecha) {
       if (fl.fecha !== e.fecha && !e.hora) fl.hora = null;
       fl.fecha = e.fecha;
+      fl.fechaDescartada = null;
       fl.desdeFecha = null;
       fl.pagHora = 0;
       n++;
@@ -814,10 +818,20 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
     setTimeout(menuChips, 900);
   }
 
+  function esLugarRec(nom?: string | null) {
+    const fi = F();
+    return ["mesa", "cancha", "box", "sala", "consultorio"].includes(norm(fi.recurso)) || /\b(cancha|mesa|box|sala|consultorio)\b/.test(norm(nom || ""));
+  }
+  function prepRec(nom?: string | null, mayus?: boolean) {
+    if (!nom) return "";
+    const p = esLugarRec(nom) ? (mayus ? "En " : "en ") : (mayus ? "Con " : "con ");
+    return p + nom;
+  }
+
   function resumenFlujo() {
     const fi = F(), fl = flujo()!, p: string[] = [];
     if (fl.servicioId) p.push(fi.servicios.find((s) => s.id === fl.servicioId)!.nombre);
-    if (fl.recursoId) p.push("con " + fi.recursos.find((r) => r.id === fl.recursoId)!.nombre);
+    if (fl.recursoId) p.push(prepRec(fi.recursos.find((r) => r.id === fl.recursoId)!.nombre));
     if (fl.fecha) p.push(etiquetaDia(fl.fecha));
     if (fl.hora) p.push(fl.hora + " h");
     else if (fl.franja) p.push(nombreFranja(fl.franja).trim());
@@ -849,7 +863,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
     if (fi.recursos.length < 2 && fl.recursoId === undefined) fl.recursoId = fi.recursos[0]?.id || null;
     if (fl.recursoId === undefined && !fl.hora) {
       fl.espera = "recurso";
-      const lugar = ["mesa", "cancha", "box", "sala", "consultorio"].includes(norm(fi.recurso));
+      const lugar = esLugarRec();
       return preguntar(
         pre + (lugar ? "¿Tenés preferencia de " + esc(fi.recurso) + "?" : "¿Con quién te gustaría atenderte?"),
         fi.recursos
@@ -887,9 +901,11 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
 
     if (!fl.fecha) {
       fl.espera = "fecha";
+      const descartada = fl.fechaDescartada || null;
+      fl.fechaDescartada = null;
       const abiertosBase = diasAbiertos(fi);
       const abiertos = fl.desdeFecha ? abiertosBase.filter((d) => d >= fl.desdeFecha!) : abiertosBase;
-      const listaDias = abiertos.length ? abiertos : abiertosBase;
+      const listaDias = (abiertos.length ? abiertos : abiertosBase).filter((d) => d !== descartada);
       const dias = listaDias.filter((d) => libresDe(d, srv, rid).some((h) => enFranja(h.hora, fl.franja))).slice(0, 8);
       if (!dias.length) {
         // Si no hay lugar con ese profesional o en esa franja, buscamos alternativas (otro profesional u otra franja)
@@ -897,10 +913,10 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
         const enOtraFranja = fl.franja ? listaDias.filter((d) => libresDe(d, srv, rid).length > 0).slice(0, 4) : [];
         if (conOtroRec.length && nomRec) {
           return preguntar(
-            pre + `Con <b>${esc(nomRec)}</b>${nombreFranja(fl.franja)} no me quedan lugares en los próximos días, pero sí tengo lugar con otro ${esc(fi.recurso)} el <b>${etiquetaDia(conOtroRec[0])}</b>. ¿Qué preferís?`,
+            pre + `${esLugarRec(nomRec) ? "En" : "Con"} <b>${esc(nomRec)}</b>${nombreFranja(fl.franja)} no me quedan lugares en los próximos días, pero sí tengo lugar ${esLugarRec(nomRec) ? "en otra" : "con otro"} ${esc(fi.recurso)} el <b>${etiquetaDia(conOtroRec[0])}</b>. ¿Qué preferís?`,
             [
-              { texto: `Ver con otro ${fi.recurso}`, lleno: true, hacer: () => { fl.recursoId = null; avanzar(); } },
-              ...(enOtraFranja.length ? [{ texto: `Con ${nomRec} en otro horario`, hacer: () => { fl.franja = null; avanzar(); } } as Chip] : []),
+              { texto: `Ver ${esLugarRec(nomRec) ? "otra" : "con otro"} ${fi.recurso}`, lleno: true, hacer: () => { fl.recursoId = null; avanzar(); } },
+              ...(enOtraFranja.length ? [{ texto: `${prepRec(nomRec, true)} en otro horario`, hacer: () => { fl.franja = null; avanzar(); } } as Chip] : []),
             ],
           );
         }
@@ -908,7 +924,11 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
         fl.franja = null;
         return setTimeout(() => chipsSet(contactoChips().concat([{ texto: "Ver otros horarios", hacer: () => avanzar() }])), 600);
       }
-      return preguntar(pre + "¿Qué día te queda más cómodo?", dias.map((d) => ({ texto: etiquetaDia(d), hacer: () => { fl.fecha = d; avanzar(); } })));
+      const prefijoDescarte = descartada ? `Dale, descartamos ${etiquetaDia(descartada).toLowerCase()}. ` : "";
+      return preguntar(
+        pre + prefijoDescarte + (descartada ? "¿Qué otro día te queda más cómodo?" : "¿Qué día te queda más cómodo?"),
+        dias.map((d) => ({ texto: etiquetaDia(d), hacer: () => { fl.fecha = d; avanzar(); } })),
+      );
     }
 
     const todos = libresDe(fl.fecha, srv, rid);
@@ -934,7 +954,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
           fl.fecha = null;
           if (proxDia) {
             return preguntar(
-              pre + `${fechaOcupada} ya se completó${nomRec ? " con " + esc(nomRec) : ""}. El próximo lugar libre es <b>${etiquetaDia(proxDia.fecha)} a las ${proxDia.horas[0].hora} h</b>. ¿Te anoto ahí o miramos otro día?`,
+              pre + `${fechaOcupada} ya se completó${nomRec ? " " + esc(prepRec(nomRec)) : ""}. El próximo lugar libre es <b>${etiquetaDia(proxDia.fecha)} a las ${proxDia.horas[0].hora} h</b>. ¿Te anoto ahí o miramos otro día?`,
               [
                 { texto: `${etiquetaDia(proxDia.fecha)} ${proxDia.horas[0].hora} h`, lleno: true, hacer: () => { fl.fecha = proxDia.fecha; fl.hora = proxDia.horas[0].hora; avanzar(); } },
                 { texto: "Ver otros días", hacer: () => avanzar() },
@@ -946,11 +966,12 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
         }
 
         fl.espera = "hora";
+        const prepM = esLugarRec(nomRec) ? "en" : "con";
         const textoAlternativa =
           otroEnMismaHora && nomOtro
-            ? `A las <b>${pedidaHora} h</b> con <b>${esc(nomRec || "")}</b> está ocupado, pero a las <b>${pedidaHora} h está libre con ${esc(nomOtro)}</b>` +
-              (cerca.length ? `, o con <b>${esc(nomRec || "")}</b> tenés estos horarios cerca:` : ".")
-            : `A las <b>${pedidaHora} h</b>${nomRec ? " con " + esc(nomRec) : ""} ya está ocupado. Lo más cercano libre ${etiquetaDia(fl.fecha).toLowerCase()} es:`;
+            ? `A las <b>${pedidaHora} h</b> ${prepM} <b>${esc(nomRec || "")}</b> está ocupado, pero a las <b>${pedidaHora} h está libre ${prepM} ${esc(nomOtro)}</b>` +
+              (cerca.length ? `, o ${prepM} <b>${esc(nomRec || "")}</b> tenés estos horarios cerca:` : ".")
+            : `A las <b>${pedidaHora} h</b>${nomRec ? " " + esc(prepRec(nomRec)) : ""} ya está ocupado. Lo más cercano libre ${etiquetaDia(fl.fecha).toLowerCase()} es:`;
 
         return preguntar(
           pre + textoAlternativa,
@@ -958,7 +979,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
             ...(otroEnMismaHora && nomOtro
               ? [
                   {
-                    texto: `${pedidaHora} h con ${nomOtro}`,
+                    texto: `${pedidaHora} h ${prepRec(nomOtro)}`,
                     lleno: true,
                     hacer: () => {
                       fl.recursoId = otroEnMismaHora.recursoId;
@@ -969,7 +990,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
                 ]
               : []),
             ...cerca.map((h) => ({
-              texto: h.hora + (nomRec && otroEnMismaHora ? ` con ${nomRec}` : ""),
+              texto: h.hora + (nomRec && otroEnMismaHora ? ` ${prepRec(nomRec)}` : ""),
               hacer: () => { fl.hora = h.hora; avanzar(); },
             })),
             { texto: "Elegir otro día", hacer: () => { fl.fecha = null; fl.hora = null; avanzar(); } },
@@ -990,14 +1011,15 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
         const otroMismoDia = rid ? libresDe(fl.fecha, srv, null) : [];
         const proxDia = buscarProximosHuecos(srv, rid, fl.franja, 1)[0];
         const diaTxt = etiquetaDia(fl.fecha);
+        const prepM = esLugarRec(nomRec) ? "en" : "con";
         if (otroMismoDia.length && nomRec) {
           const recAlt = fi.recursos.find((r) => r.id === otroMismoDia[0].recursoId);
           return preguntar(
-            pre + `${diaTxt} con <b>${esc(nomRec)}</b> ya está completo, pero tenés lugar ese mismo día con <b>${esc(recAlt?.nombre || "otro " + fi.recurso)}</b> (desde las ${otroMismoDia[0].hora} h)` +
-              (proxDia ? ` o con <b>${esc(nomRec)}</b> el <b>${etiquetaDia(proxDia.fecha)}</b>.` : "."),
+            pre + `${diaTxt} ${prepM} <b>${esc(nomRec)}</b> ya está completo, pero tenés lugar ese mismo día ${prepM} <b>${esc(recAlt?.nombre || "otro " + fi.recurso)}</b> (desde las ${otroMismoDia[0].hora} h)` +
+              (proxDia ? ` o ${prepM} <b>${esc(nomRec)}</b> el <b>${etiquetaDia(proxDia.fecha)}</b>.` : "."),
             [
-              { texto: `${diaTxt} con ${recAlt?.nombre || "otro"}`, lleno: true, hacer: () => { fl.recursoId = otroMismoDia[0].recursoId; avanzar(); } },
-              ...(proxDia ? [{ texto: `${etiquetaDia(proxDia.fecha)} con ${nomRec}`, hacer: () => { fl.fecha = proxDia.fecha; avanzar(); } } as Chip] : []),
+              { texto: `${diaTxt} ${prepRec(recAlt?.nombre || "otro")}`, lleno: true, hacer: () => { fl.recursoId = otroMismoDia[0].recursoId; avanzar(); } },
+              ...(proxDia ? [{ texto: `${etiquetaDia(proxDia.fecha)} ${prepRec(nomRec)}`, hacer: () => { fl.fecha = proxDia.fecha; avanzar(); } } as Chip] : []),
               { texto: "Ver otros días", hacer: () => { fl.fecha = null; avanzar(); } },
             ],
           );
@@ -1019,7 +1041,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
         const hDia = fi.horarios[desdeIso(fl.fecha).getDay()];
         return preguntar(
           pre +
-            `El último horario libre ${etiquetaDia(fl.fecha).toLowerCase()}${nomRec ? " con " + esc(nomRec) : ""} es a las <b>${ultimo.hora} h</b>` +
+            `El último horario libre ${etiquetaDia(fl.fecha).toLowerCase()}${nomRec ? " " + esc(prepRec(nomRec)) : ""} es a las <b>${ultimo.hora} h</b>` +
             (hDia ? ` (cerramos a las ${hDia.cierra} h)` : "") +
             `. Te dejo los últimos de ese día o podemos mirar otro día:`,
           [
@@ -1034,8 +1056,8 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
       const hayMasTarde = (pag + 1) * TAM_PAG < hs.length;
       const tituloHoras =
         pag > 0
-          ? `Estos son los horarios de más tarde ${etiquetaDia(fl.fecha).toLowerCase()}${nomRec ? " con " + esc(nomRec) : ""}:`
-          : `Estos horarios están libres ${etiquetaDia(fl.fecha).toLowerCase()}${nomRec ? " con " + esc(nomRec) : ""}${fl.franja ? " (" + esc(fl.franja[2]) + ")" : ""}:`;
+          ? `Estos son los horarios de más tarde ${etiquetaDia(fl.fecha).toLowerCase()}${nomRec ? " " + esc(prepRec(nomRec)) : ""}:`
+          : `Estos horarios están libres ${etiquetaDia(fl.fecha).toLowerCase()}${nomRec ? " " + esc(prepRec(nomRec)) : ""}${fl.franja ? " (" + esc(fl.franja[2]) + ")" : ""}:`;
 
       return preguntar(
         pre + aviso + tituloHoras,
