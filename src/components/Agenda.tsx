@@ -205,7 +205,7 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
   const pendientes = activos.filter((t) => t.estado === "pendiente").length;
   const senaRec = activos.filter((t) => t.sena.estado === "recibida").reduce((s, t) => s + (t.sena.monto || 0), 0);
   const senaDec = activos.filter((t) => t.sena.estado === "declarada").reduce((s, t) => s + (t.sena.monto || 0), 0);
-  const linkChat = typeof window !== "undefined" ? window.location.origin + "/t/" + ficha.slug : "/t/" + ficha.slug;
+  const linkChat = typeof window !== "undefined" ? window.location.origin + "/" + ficha.slug : "/" + ficha.slug;
   const msgWaCliente = `Si querés sacar o agendar turno o una visita, entrá a este link que te va a atender nuestro asesor virtual: ${linkChat}`;
 
   function textoResumen() {

@@ -15,7 +15,7 @@ export default async function PaginaQr() {
   if (!loc) redirect("/login");
   const h = await headers();
   const base = process.env.NEXT_PUBLIC_BASE_URL?.replace(/\/$/, "") || `${h.get("x-forwarded-proto") || "http"}://${h.get("host")}`;
-  const url = `${base}/t/${loc.ficha.slug}`;
+  const url = `${base}/${loc.ficha.slug}`;
   const svg = await QRCode.toString(url, { type: "svg", margin: 1, errorCorrectionLevel: "M" });
   return (
     <div className="centrado">

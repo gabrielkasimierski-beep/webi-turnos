@@ -68,7 +68,7 @@ export default function Configurar({ ficha, integ, onGuardada }: { ficha: Ficha;
   const descartar = () => { setB(structuredClone(ficha)); setClaveConfirm(""); aplicarMarca(ficha.color); setNota({ txt: "", tipo: "" }); };
 
   const sn = b.sena, pct = sn.tipo === "porcentaje";
-  const link = typeof window !== "undefined" ? window.location.origin + "/t/" + ficha.slug : "/t/" + ficha.slug;
+  const link = typeof window !== "undefined" ? window.location.origin + "/" + ficha.slug : "/" + ficha.slug;
   const msgWa = `Si querés sacar o agendar turno o una visita, entrá a este link que te va a atender nuestro asesor virtual: ${link}`;
   const [copiadoTxt, setCopiadoTxt] = useState("");
   async function copiarAlPortapapeles(texto: string, cartel: string) {
@@ -89,7 +89,7 @@ export default function Configurar({ ficha, integ, onGuardada }: { ficha: Ficha;
         <p className="sub">Poné este link en tu Instagram, mandalo por WhatsApp o imprimí el QR para pegar en el mostrador.</p>
         <div className="acciones">
           <a className="btn pri" href="/panel/qr" target="_blank">Ver e imprimir el QR</a>
-          <a className="btn" href={"/t/" + ficha.slug} target="_blank">Abrir el chat</a>
+          <a className="btn" href={"/" + ficha.slug} target="_blank">Abrir el chat</a>
           <button className="btn" type="button" onClick={() => copiarAlPortapapeles(link, "Link copiado ✓ (pegalo en tu biografía de Instagram)")}>📋 Copiar link</button>
           <button className="btn" type="button" onClick={() => copiarAlPortapapeles(msgWa, "Mensaje copiado ✓")}>💬 Copiar saludo p/ WhatsApp</button>
           <span className="nota num">{link}</span>
