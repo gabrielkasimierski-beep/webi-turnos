@@ -77,6 +77,7 @@ function AvisoSuscripcion({ sus, nombre }: { sus: Suscripcion; nombre: string })
     <div style={{ ...base, background: "rgba(240,127,118,.13)", borderColor: "rgba(240,127,118,.55)", display: "flex", flexDirection: "column", gap: 10 }}>
       <div>
         <b>Tu prueba gratis terminó.</b> Para seguir usando el asistente, transferí {montoTxt}{COBRO.monto > 0 ? "/mes" : ""} al alias <b>{COBRO.alias}</b> ({COBRO.titular}) y avisanos.
+        <span style={{ display: "block", marginTop: 4, fontSize: ".82rem", color: "var(--muted)" }}>CVU {COBRO.cvu}</span>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <a className="btn pri" href={`https://wa.me/${COBRO.wa}?text=${encodeURIComponent(msg)}`} target="_blank" rel="noopener">Ya transferí, avisar</a>

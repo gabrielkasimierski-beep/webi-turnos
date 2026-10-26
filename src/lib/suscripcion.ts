@@ -6,11 +6,12 @@
 
 export const DIAS_PRUEBA = 10;
 
-/** Datos de cobro de WEBI que se muestran en el cartel. ← COMPLETAR con el monto y el alias reales. */
+/** Datos de cobro de WEBI que se muestran en el cartel (Mercado Pago de Gabriel). */
 export const COBRO = {
-  monto: 0,                 // $ por mes (0 = todavía sin definir; el cartel lo omite hasta cargarlo)
-  alias: "alias.a.completar", // alias / CVU / CBU donde el local transfiere
-  titular: "WEBI",          // a nombre de quién figura la cuenta
+  monto: 29000,             // $ por mes
+  alias: "webi2027",        // alias de Mercado Pago donde el local transfiere
+  cvu: "0000003100053998187550", // CVU, por si el banco pide ese dato
+  titular: "Gabriel Kasimierski", // a nombre de quién figura la cuenta
   wa: "5491156328481",      // WhatsApp de WEBI para avisar el pago
 };
 
