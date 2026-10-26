@@ -6,6 +6,9 @@ import { aplicarMarca } from "@/lib/html";
 import Agenda from "./Agenda";
 import Configurar from "./Configurar";
 
+/** WhatsApp de soporte de Webi (el mismo de la web). */
+const SOPORTE_WA = "5491156328481";
+
 export default function Panel({ fichaInicial, integ }: { fichaInicial: Ficha; integ: { wa: boolean } }) {
   const [ficha, setFicha] = useState(fichaInicial);
   const [cara, setCara] = useState<"agenda" | "configurar">("agenda");
@@ -27,6 +30,18 @@ export default function Panel({ fichaInicial, integ }: { fichaInicial: Ficha; in
           {cara === "agenda" ? <Agenda ficha={ficha} /> : <Configurar ficha={ficha} integ={integ} onGuardada={setFicha} />}
         </section>
       </div>
+      <footer style={{ width: "min(760px,100%)", margin: "18px auto 8px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: ".85rem", color: "var(--muted)" }}>¿Alguna duda o algo no anda?</span>
+        <a
+          className="btn"
+          href={`https://wa.me/${SOPORTE_WA}?text=${encodeURIComponent(`Hola Webi 👋 Soy de «${ficha.nombre}» y necesito ayuda con el asistente de turnos.`)}`}
+          target="_blank"
+          rel="noopener"
+          style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+        >
+          💬 Hablar con soporte
+        </a>
+      </footer>
     </>
   );
 }
