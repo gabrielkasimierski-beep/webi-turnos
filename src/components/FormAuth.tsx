@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import { RUBROS } from "@/lib/rubros";
+import MarcaWebi from "@/components/MarcaWebi";
 
 export default function FormAuth({ modo }: { modo: "login" | "registro" }) {
   const [paso, setPaso] = useState<"clave" | "olvide" | "codigo">("clave");
@@ -43,7 +44,7 @@ export default function FormAuth({ modo }: { modo: "login" | "registro" }) {
   return (
     <div className="centrado">
       <div className="tarjeta">
-        <span className="logo-web">w<i>&rsquo;</i>ebi</span>
+        <MarcaWebi fontSize="1.7rem" />
         <h1>{modo === "registro" ? "Dar de alta mi local" : paso === "clave" ? "Entrar a mi panel" : "Recuperar contraseña"}</h1>
 
         {paso === "clave" && (

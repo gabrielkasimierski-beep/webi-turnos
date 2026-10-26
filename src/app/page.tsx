@@ -1,10 +1,11 @@
 import Link from "next/link";
+import MarcaWebi from "@/components/MarcaWebi";
 
 export default function Inicio() {
   return (
     <div className="centrado">
       <div className="tarjeta">
-        <span className="logo-web">w<i>&rsquo;</i>ebi</span>
+        <MarcaWebi fontSize="1.7rem" />
         <h1>Asistente de turnos</h1>
         <p>Tu local saca turnos solo: el cliente entra a tu link o escanea el QR, chatea con tu asistente y reserva. Vos recibís el aviso en el celular y ves todo en tu agenda.</p>
         <Link className="btn pri" href="/login" style={{ textAlign: "center" }}>Entrar a mi panel</Link>

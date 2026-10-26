@@ -10,6 +10,7 @@ import type { Ficha, Ocupacion, Servicio, Turno } from "@/lib/tipos";
 import { aHora, aMin, ahoraAR, cap, desdeIso, DIAS_L, diasAbiertos, etiquetaDia, hoyIso, libres, norm, pideSena, plata, precioTxt, senaDe, senaMonto } from "@/lib/negocio";
 import { entender, type Entendido } from "@/lib/interprete";
 import { aplicarMarca, esc, escA } from "@/lib/html";
+import MarcaWebi from "@/components/MarcaWebi";
 
 /** Comprime la captura del comprobante (máx 1280px, JPEG 0.82) para que sea liviana pero nítida para el OCR. */
 function prepararComprobante(file: File): Promise<string> {
@@ -1608,7 +1609,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
           <textarea id="texto" rows={1} placeholder="Escribí tu consulta…" autoComplete="off" value={texto} onChange={(e) => setTexto(e.target.value)} onKeyDown={onKey} />
           <button className="enviar" type="submit" aria-label="Enviar" disabled={!texto.trim()}>&#8593;</button>
         </form>
-        <a className="sello" href="https://web-ia-ruddy.vercel.app/" target="_blank" rel="noopener" aria-label="Con tecnología WEBI">con tecnología <b>w<i>&rsquo;</i>ebi</b></a>
+        <a className="sello" href="https://web-ia-ruddy.vercel.app/" target="_blank" rel="noopener" aria-label="Con tecnología WEBI">con tecnología <MarcaWebi fontSize="1.05em" /></a>
       </section>
     </div>
   );
