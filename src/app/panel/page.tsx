@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import Panel from "@/components/Panel";
 import { sesionActual } from "@/server/auth";
 import { localPorId } from "@/server/repo";
-import { waDisponible } from "@/server/whatsapp";
 import { faseSuscripcion, type Fase } from "@/lib/suscripcion";
 
 export const dynamic = "force-dynamic";
@@ -39,5 +38,5 @@ export default async function PaginaPanel({ searchParams }: { searchParams: Prom
     const f = (await searchParams)?.fase as Fase | undefined;
     if (f) suscripcion = { ...suscripcion, fase: f, diasRestantes: f === "prueba" ? suscripcion.diasRestantes || 6 : 0 };
   }
-  return <Panel fichaInicial={loc.ficha} integ={{ wa: waDisponible() }} suscripcion={suscripcion} />;
+  return <Panel fichaInicial={loc.ficha} suscripcion={suscripcion} />;
 }

@@ -11,7 +11,7 @@ import { COBRO, PLANES, precioReal, descuento, type Suscripcion } from "@/lib/su
 /** WhatsApp de soporte de Webi (el mismo de la web). */
 const SOPORTE_WA = "5491156328481";
 
-export default function Panel({ fichaInicial, integ, suscripcion }: { fichaInicial: Ficha; integ: { wa: boolean }; suscripcion?: Suscripcion }) {
+export default function Panel({ fichaInicial, suscripcion }: { fichaInicial: Ficha; suscripcion?: Suscripcion }) {
   const [ficha, setFicha] = useState(fichaInicial);
   const [cara, setCara] = useState<"agenda" | "configurar">("agenda");
   useEffect(() => { aplicarMarca(ficha.color); }, [ficha.color]);
@@ -30,7 +30,7 @@ export default function Panel({ fichaInicial, integ, suscripcion }: { fichaInici
       {suscripcion && <AvisoSuscripcion sus={suscripcion} nombre={ficha.nombre} />}
       <div className="marco" style={{ width: "min(760px,100%)" }}>
         <section className="vista">
-          {cara === "agenda" ? <Agenda ficha={ficha} /> : <Configurar ficha={ficha} integ={integ} onGuardada={setFicha} />}
+          {cara === "agenda" ? <Agenda ficha={ficha} /> : <Configurar ficha={ficha} onGuardada={setFicha} />}
         </section>
       </div>
       <footer style={{ width: "min(760px,100%)", margin: "18px auto 8px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>

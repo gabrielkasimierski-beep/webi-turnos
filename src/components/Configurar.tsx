@@ -28,7 +28,7 @@ function cargarLogo(file: File): Promise<string> {
 
 type Nota = { txt: string; tipo: "" | "ok" | "mal" };
 
-export default function Configurar({ ficha, integ, onGuardada }: { ficha: Ficha; integ: { wa: boolean }; onGuardada: (f: Ficha) => void }) {
+export default function Configurar({ ficha, onGuardada }: { ficha: Ficha; onGuardada: (f: Ficha) => void }) {
   const [b, setB] = useState<Ficha>(() => structuredClone(ficha));
   const [nota, setNota] = useState<Nota>({ txt: "", tipo: "" });
   const [cambiarRubro, setCambiarRubro] = useState<string | null>(null);
@@ -175,12 +175,7 @@ export default function Configurar({ ficha, integ, onGuardada }: { ficha: Ficha;
         </div>}
       </section>
 
-      <section className="bloque"><h3>8 · WhatsApp automático</h3>
-        <label className="check"><input type="checkbox" checked={b.whatsappAuto} onChange={(e) => upd((x) => { x.whatsappAuto = e.target.checked; })} /> WhatsApp automático: confirmación al reservar y recordatorio antes del {b.palabra}</label>
-        <p className="nota">{integ.wa ? "Los mensajes salen desde el número de WEBI a nombre de tu local; si el cliente responde SÍ, queda confirmado. " : "WhatsApp automático todavía no está habilitado en esta instalación: mientras tanto usá el botón “Recordar por WhatsApp” de la agenda. "}Tu WhatsApp (arriba) es al que escriben los clientes que piden hablar con una persona.</p>
-      </section>
-
-      <section className="bloque"><h3>9 · Seguridad y contraseña</h3>
+      <section className="bloque"><h3>8 · Seguridad y contraseña</h3>
         <p className="sub">Si sospechás que alguien entró a tu cuenta o dejaste abierta otra computadora, cambiá la contraseña acá: eso expulsa en el acto a cualquier otro dispositivo.</p>
         <div className="campos">
           <label className="c">Contraseña actual<input type="password" value={claveAct} onChange={(e) => setClaveAct(e.target.value)} autoComplete="current-password" /></label>
