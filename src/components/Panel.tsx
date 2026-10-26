@@ -54,8 +54,8 @@ function AvisoSuscripcion({ sus, nombre }: { sus: Suscripcion; nombre: string })
   if (sus.fase === "activa" || sus.fase === "cancelada") return null;
   const montoTxt = COBRO.monto > 0 ? "$" + COBRO.monto.toLocaleString("es-AR") : "la suscripción";
   const base: CSSProperties = {
-    width: "min(760px,100%)", margin: "0 auto 12px", borderRadius: 14, padding: "12px 15px",
-    border: "1px solid", fontSize: ".92rem", lineHeight: 1.4, color: "var(--ink)", boxSizing: "border-box",
+    width: "min(760px,100%)", margin: "0 auto 10px", borderRadius: 12, padding: "8px 12px",
+    border: "1px solid", fontSize: ".82rem", lineHeight: 1.35, color: "var(--ink)", boxSizing: "border-box",
   };
 
   if (sus.fase === "prueba") {
@@ -71,17 +71,22 @@ function AvisoSuscripcion({ sus, nombre }: { sus: Suscripcion; nombre: string })
     );
   }
 
-  // vencida: el servicio sigue andando, con el cartel de pago bien visible
+  // vencida: el servicio sigue andando; el aviso es compacto para no tapar la agenda
   const msg = `Hola Webi 👋 Soy de «${nombre}», ya transferí la suscripción del asistente de turnos.`;
   return (
-    <div style={{ ...base, background: "rgba(240,127,118,.13)", borderColor: "rgba(240,127,118,.55)", display: "flex", flexDirection: "column", gap: 10 }}>
-      <div>
-        <b>Tu prueba gratis terminó.</b> Para seguir usando el asistente, transferí {montoTxt}{COBRO.monto > 0 ? "/mes" : ""} al alias <b>{COBRO.alias}</b> ({COBRO.titular}) y avisanos.
-        <span style={{ display: "block", marginTop: 4, fontSize: ".82rem", color: "var(--muted)" }}>CVU {COBRO.cvu}</span>
-      </div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <a className="btn pri" href={`https://wa.me/${COBRO.wa}?text=${encodeURIComponent(msg)}`} target="_blank" rel="noopener">Ya transferí, avisar</a>
-      </div>
+    <div style={{ ...base, background: "rgba(240,127,118,.12)", borderColor: "rgba(240,127,118,.5)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "4px 12px", flexWrap: "wrap" }}>
+      <span style={{ minWidth: 0 }}>
+        <b>Prueba terminada.</b> Seguí por {montoTxt}{COBRO.monto > 0 ? "/mes" : ""} al alias <b>{COBRO.alias}</b> ({COBRO.titular}).
+        <span style={{ color: "var(--muted)" }}> · CVU {COBRO.cvu}</span>
+      </span>
+      <a
+        href={`https://wa.me/${COBRO.wa}?text=${encodeURIComponent(msg)}`}
+        target="_blank"
+        rel="noopener"
+        style={{ flex: "none", fontSize: ".8rem", fontWeight: 600, padding: "6px 12px", borderRadius: 999, background: "var(--brand)", color: "var(--brand-ink)", textDecoration: "none", whiteSpace: "nowrap" }}
+      >
+        Ya transferí
+      </a>
     </div>
   );
 }
