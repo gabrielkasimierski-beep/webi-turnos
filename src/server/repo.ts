@@ -2,7 +2,7 @@
    REPO · todo el acceso a Postgres. REGLA DE ORO: cada función recibe el localId y filtra por él.
    Nada acá lee ni escribe filas de otro local.
    ===================================================================== */
-import { and, asc, eq, gte, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
 import { getDb, schema } from "@/db";
 import { aMin, ahoraAR, desdeIso, diasAbiertos, dig, hoyIso, iso, libres, pideSena, senaMonto, slugify, telClave } from "@/lib/negocio";
 import type { Ficha, Ocupacion, ResumenCliente, Turno } from "@/lib/tipos";
@@ -45,7 +45,17 @@ export async function localPorId(id: string) {
   const db = await getDb();
   const [l] = await db.select().from(locales).where(eq(locales.id, id)).limit(1);
   if (!l) return null;
-  return { id: l.id, estado: l.estadoSuscripcion, ficha: await fichaDeLocal(l) };
+  return { id: l.id, estado: l.estadoSuscripcion, creado: l.creado, ficha: await fichaDeLocal(l) };
+}
+
+/** Agente diario: marca como "vencida" la prueba de los locales que pasaron los N días desde el alta. Devuelve cuántos. */
+export async function vencerPruebasExpiradas(dias: number): Promise<number> {
+  const db = await getDb();
+  const corte = new Date(Date.now() - dias * 86_400_000);
+  const filas = await db.update(locales).set({ estadoSuscripcion: "vencida" })
+    .where(and(eq(locales.estadoSuscripcion, "prueba"), lt(locales.creado, corte)))
+    .returning({ id: locales.id });
+  return filas.length;
 }
 
 /** Guarda la ficha completa. Recursos y servicios se sincronizan: los que ya no están se borran (los turnos viejos conservan el nombre copiado). */
