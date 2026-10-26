@@ -323,3 +323,21 @@ export async function usuarioPorMail(mail: string) {
   const [u] = await db.select().from(usuarios).where(eq(usuarios.mail, mail.trim().toLowerCase())).limit(1);
   return u || null;
 }
+
+/* ---------- admin de Webi ---------- */
+/** Todos los locales con lo necesario para el panel de admin (estado + fecha de alta). */
+export async function listarLocalesAdmin() {
+  const db = await getDb();
+  const filas = await db.select({
+    id: locales.id, slug: locales.slug, nombre: locales.nombre, mail: usuarios.mail,
+    estado: locales.estadoSuscripcion, creado: locales.creado,
+  }).from(locales).leftJoin(usuarios, eq(usuarios.localId, locales.id)).orderBy(asc(locales.creado));
+  return filas.map((f) => ({ ...f, creado: f.creado.toISOString() }));
+}
+/** Cambia el estado de suscripción de un local (lo usa el admin para marcar pagos). */
+export async function cambiarEstadoLocal(localId: string, estado: string): Promise<boolean> {
+  if (!["prueba", "activa", "vencida", "cancelada"].includes(estado)) return false;
+  const db = await getDb();
+  const r = await db.update(locales).set({ estadoSuscripcion: estado }).where(eq(locales.id, localId)).returning({ id: locales.id });
+  return r.length > 0;
+}

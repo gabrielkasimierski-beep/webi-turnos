@@ -10,7 +10,7 @@ const config: NextConfig = {
         destination: "/registro",
       },
       {
-        source: "/:slug((?!panel|login|registro|agentedeturnosvirtual|t|api|_next|sw\\.js|manifest\\.webmanifest|favicon\\.ico).*)",
+        source: "/:slug((?!panel|login|registro|admin|agentedeturnosvirtual|t|api|_next|sw\\.js|manifest\\.webmanifest|favicon\\.ico).*)",
         destination: "/t/:slug",
       },
     ];
