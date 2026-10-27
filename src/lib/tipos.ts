@@ -1,7 +1,7 @@
 export type Horario = { abre: string; cierra: string } | null;
 export type Horarios = Record<string, Horario>; // clave: día de la semana 0 (dom) a 6 (sáb)
 export type Faq = { p: string; r: string };
-export type Sena = { activa: boolean; obligatoria: boolean; tipo: "fijo" | "porcentaje"; monto: number; alias: string; nota: string };
+export type Sena = { activa: boolean; obligatoria: boolean; tipo: "fijo" | "porcentaje"; monto: number; alias: string; nota: string; titular?: string };
 export type Fidelidad = { activa: boolean; cadaCuantos: number; premio: string };
 
 export type Recurso = { id: string; nombre: string };

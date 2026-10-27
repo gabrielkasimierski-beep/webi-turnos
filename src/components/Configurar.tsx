@@ -162,9 +162,10 @@ export default function Configurar({ ficha, onGuardada }: { ficha: Ficha; onGuar
           <label className="c">Cómo se calcula<select value={sn.tipo} onChange={(e) => upd((x) => { x.sena.tipo = e.target.value as "fijo" | "porcentaje"; })}><option value="fijo">Monto fijo $</option><option value="porcentaje">Porcentaje del servicio %</option></select></label>
           <label className="c">{pct ? "Porcentaje de la seña %" : "Monto de la seña $"}<input className="num" type="number" min={0} max={pct ? 100 : undefined} step={pct ? 5 : 100} value={sn.monto} onChange={(e) => upd((x) => { x.sena.monto = Number(e.target.value); })} /></label>
           <label className="c">Alias / CBU / CVU<input value={sn.alias} autoComplete="off" onChange={(e) => upd((x) => { x.sena.alias = e.target.value; })} /></label>
+          <label className="c">Titular de la cuenta (como figura en el comprobante)<input value={sn.titular || ""} placeholder="Ej: Juan Pérez" autoComplete="off" onChange={(e) => upd((x) => { x.sena.titular = e.target.value; })} /></label>
           <label className="c">Nota de la seña (opcional)<input value={sn.nota} autoComplete="off" onChange={(e) => upd((x) => { x.sena.nota = e.target.value; })} /></label>
         </div>
-        <p className="nota">{pct ? "La seña es ese % del precio de cada servicio (redondeado). " : ""}El cliente transfiere al alias (sin comisiones) y sube el comprobante en el chat: el asistente corrobora que el importe y la fecha coincidan y te avisa en la agenda.</p>
+        <p className="nota">{pct ? "La seña es ese % del precio de cada servicio (redondeado). " : ""}El cliente transfiere al alias (sin comisiones) y sube el comprobante en el chat: el asistente corrobora que el importe, la fecha y el destinatario coincidan y te avisa en la agenda. Cargá el titular tal cual figura en tu cuenta: si no coincide, el comprobante se rechaza. Siempre confirmá en tu cuenta que la plata haya llegado.</p>
       </section>
 
       <section className="bloque"><h3>7 · Programa de fidelidad</h3><p className="sub">Cuenta las visitas atendidas de cada cliente por su celular. Cuando llega a la meta, le toca el premio y lo ves en la agenda para entregarlo.</p>

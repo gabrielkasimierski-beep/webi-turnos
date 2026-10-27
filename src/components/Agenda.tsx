@@ -242,11 +242,11 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
               sonarAviso("turno");
               dispararPushLocal(`📅 Nuevo ${palabra} en ${ficha.nombre}`, `${t.nombre || "Cliente"} · ${etiquetaDia(t.fecha)} a las ${t.hora} h (${t.servicioNombre})`, "turno-" + t.id);
             } else if (ant && ant.sena?.estado !== "declarada" && t.sena?.estado === "declarada") {
-              const msg = `✅ ¡Seña verificada! ${t.nombre || "Cliente"} transfirió ${plata(t.sena.monto)} (${etiquetaDia(t.fecha)} ${t.hora} h)`;
+              const msg = `🧾 Seña por confirmar: ${t.nombre || "Cliente"} subió un comprobante de ${plata(t.sena.monto)} (${etiquetaDia(t.fecha)} ${t.hora} h). Revisá que te haya llegado.`;
               setAvisoVivo(msg);
               setDia(t.fecha);
               sonarAviso("sena");
-              dispararPushLocal(`✅ Seña verificada · ${plata(t.sena.monto)}`, `${t.nombre || "Cliente"} subió el comprobante para ${etiquetaDia(t.fecha)} a las ${t.hora} h`, "sena-" + t.id);
+              dispararPushLocal(`🧾 Seña por confirmar · ${plata(t.sena.monto)}`, `${t.nombre || "Cliente"} subió el comprobante para ${etiquetaDia(t.fecha)} a las ${t.hora} h`, "sena-" + t.id);
             } else if (ant && !ant.confirmado && t.confirmado) {
               const msg = `👍 ${t.nombre || "Cliente"} confirmó asistencia (${etiquetaDia(t.fecha)} ${t.hora} h)`;
               setAvisoVivo(msg);
@@ -481,7 +481,7 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
                 {t.estado !== "cancelado" && (t.confirmado || sn) && (
                   <div className="marcas">
                     {t.confirmado && <span className="pill atendido">Confirmó ✓</span>}
-                    {sn && <span className={"pill " + ({ pendiente: "pendiente", declarada: "warn", recibida: "atendido" } as Record<string, string>)[sn.estado]}>{({ pendiente: "Seña ⏳", declarada: "Ya pagó · Comprobante ✓", recibida: "Seña ✓" } as Record<string, string>)[sn.estado]} {plata(sn.monto)}</span>}
+                    {sn && <span className={"pill " + ({ pendiente: "pendiente", declarada: "warn", recibida: "atendido" } as Record<string, string>)[sn.estado]}>{({ pendiente: "Seña ⏳", declarada: "Seña por confirmar 🧾", recibida: "Seña ✓" } as Record<string, string>)[sn.estado]} {plata(sn.monto)}</span>}
                   </div>
                 )}
                 {abre && (

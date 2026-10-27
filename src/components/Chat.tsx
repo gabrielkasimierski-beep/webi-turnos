@@ -7,7 +7,7 @@
    ===================================================================== */
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from "react";
 import type { Ficha, Ocupacion, Servicio, Turno } from "@/lib/tipos";
-import { aHora, aMin, ahoraAR, cap, desdeIso, DIAS_L, diasAbiertos, etiquetaDia, hoyIso, libres, norm, pideSena, plata, precioTxt, senaDe, senaMonto } from "@/lib/negocio";
+import { aHora, aMin, ahoraAR, cap, desdeIso, DIAS_L, diasAbiertos, etiquetaDia, hoyIso, libres, norm, pideSena, plata, precioTxt, RETENCION_SENA_MIN, senaDe, senaMonto } from "@/lib/negocio";
 import { entender, type Entendido } from "@/lib/interprete";
 import { aplicarMarca, esc, escA } from "@/lib/html";
 import MarcaWebi from "@/components/MarcaWebi";
@@ -1323,7 +1323,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
       "<div><span>Hora</span>" + t.hora + " h</div>" +
       "<div><span>Total</span>" + (t.precio > 0 ? "<b class='num'>" + plata(t.precio) + "</b>" : "A consultar") + "</div>" +
       (conSenaVerificada && t.sena?.monto > 0
-        ? "<div><span>Seña abonada</span>✅ <b class='num'>" + plata(t.sena.monto) + "</b> (verificada)</div>" +
+        ? "<div><span>Seña abonada</span>✅ <b class='num'>" + plata(t.sena.monto) + "</b> (comprobante enviado)</div>" +
           (resta > 0 ? "<div><span>Resta en el local</span><b class='num'>" + plata(resta) + "</b></div>" : "")
         : "") +
       "<div><span>Nombre</span>" + esc(t.nombre) + "</div>" +
@@ -1384,7 +1384,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
           (s.nota ? "<div><span>Nota</span>" + esc(s.nota) + "</div>" : "") +
           "</div>",
       },
-      (oblig ? "Sin la seña, el lugar no queda reservado. " : "") +
+      (oblig ? "Sin la seña, el lugar no queda reservado: te lo guardo " + RETENCION_SENA_MIN + " minutos y después se libera. " : "") +
         "Hacé la transferencia al alias y subí acá la captura del comprobante (corroboro que coincidan el importe y la fecha de hoy para confirmarte).",
     ]);
     const volver = () => { senaPendRef.current = null; setTimeout(menuChips, 900); };
@@ -1453,9 +1453,9 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
     const fid = F().fidelidad;
     burbuja(
       "bot",
-      "✅ <b>¡Comprobante verificado y " + esc(palabra()) + " confirmado!</b> Coinciden el importe (<b class='num'>" +
+      "✅ <b>¡Comprobante recibido, tu " + esc(palabra()) + " queda reservado!</b> Coinciden el importe (<b class='num'>" +
         plata(pend.t.sena.monto) +
-        "</b>) y la fecha de hoy. Ya le figurás como <b>Ya pagó</b> al local 🙌" +
+        "</b>), la fecha de hoy y el destinatario. Le avisé al local para que lo confirme 🙌" +
         fichaResumenTurno(pend.t, true),
     );
     burbuja("bot", "Si necesitás reprogramar o cancelar, escribime “cambiar mi " + palabra() + "” en cualquier momento. ¡Te esperamos!");

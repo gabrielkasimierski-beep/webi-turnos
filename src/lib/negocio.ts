@@ -36,7 +36,9 @@ export const telClave = (t: string) => { const d = dig(t); return d.length >= 8 
 export const mismoTel = (a: string, b: string) => { const x = telClave(a), y = telClave(b); return !!x && x === y; };
 
 /* --- seña --- */
-export const senaDe = (f: Pick<Ficha, "sena">) => Object.assign({ activa: false, obligatoria: false, tipo: "fijo", monto: 0, alias: "", nota: "" }, f.sena || {}) as Ficha["sena"];
+/** En un local con seña obligatoria, minutos que se guarda el lugar esperando el comprobante; después se libera solo. */
+export const RETENCION_SENA_MIN = 30;
+export const senaDe = (f: Pick<Ficha, "sena">) => Object.assign({ activa: false, obligatoria: false, tipo: "fijo", monto: 0, alias: "", nota: "", titular: "" }, f.sena || {}) as Ficha["sena"];
 /** Cuánto sale la seña de ESTE servicio: la propia del servicio, o el monto fijo / porcentaje (redondeado a $100) del local. */
 export function senaMonto(f: Pick<Ficha, "sena">, srv: Pick<Servicio, "precio" | "sena"> | undefined) {
   const s = senaDe(f); if (!s.activa) return 0;

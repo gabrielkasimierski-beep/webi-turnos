@@ -4,7 +4,7 @@
    ===================================================================== */
 import { and, asc, eq, gte, inArray, lt, ne, sql } from "drizzle-orm";
 import { getDb, schema } from "@/db";
-import { aMin, ahoraAR, desdeIso, diasAbiertos, dig, hoyIso, iso, libres, pideSena, senaMonto, slugify, telClave } from "@/lib/negocio";
+import { aMin, ahoraAR, desdeIso, diasAbiertos, dig, hoyIso, iso, libres, pideSena, RETENCION_SENA_MIN, senaDe, senaMonto, slugify, telClave } from "@/lib/negocio";
 import type { Ficha, Ocupacion, ResumenCliente, Turno } from "@/lib/tipos";
 import { armarFicha } from "@/lib/rubros";
 import { verificarComprobanteImagen } from "./comprobante";
@@ -122,6 +122,19 @@ const aTurno = (t: typeof turnos.$inferSelect): Turno => ({
   recordado: t.recordado ? t.recordado.toISOString() : null, origen: t.origen, creado: t.creado.toISOString(),
 });
 
+/** Local con seña obligatoria: cancela las reservas del chat que siguen sin comprobante después de la retención, y libera el lugar. */
+export async function liberarSenasVencidas(localId: string, f: Pick<Ficha, "sena">): Promise<number> {
+  const s = senaDe(f);
+  if (!s.activa || !s.obligatoria) return 0;
+  const min = Number(process.env.SENA_RETENCION_MIN) || RETENCION_SENA_MIN;
+  const db = await getDb();
+  const filas = await db.update(turnos).set({ estado: "cancelado" })
+    .where(and(eq(turnos.localId, localId), eq(turnos.estado, "pendiente"), eq(turnos.senaEstado, "pendiente"), eq(turnos.origen, "chat"),
+      sql`${turnos.senaMonto} > 0`, lt(turnos.creado, new Date(Date.now() - min * 60_000))))
+    .returning({ id: turnos.id });
+  return filas.length;
+}
+
 /** Lo que el chat público necesita para calcular huecos: solo ocupación, nunca datos de otros clientes. */
 export async function ocupacion(localId: string): Promise<Ocupacion[]> {
   const db = await getDb();
@@ -161,6 +174,7 @@ export async function reservar(localId: string, p: PedidoReserva): Promise<{ ok:
   if (!diasAbiertos(f, ahora).includes(p.fecha)) return { ok: false, motivo: "Ese día no se puede reservar." };
   const nombre = String(p.nombre || "").trim().slice(0, 60), tel = String(p.tel || "").trim().slice(0, 30);
   if (p.origen !== "local" && (!nombre || telClave(tel) === "")) return { ok: false, motivo: "Faltan tu nombre y un celular." };
+  await liberarSenasVencidas(localId, f);
   const ocup = await ocupacion(localId);
   const hueco = libres(f, ocup, p.fecha, srv, p.recursoId || null, ahora).find((x) => x.hora === p.hora);
   if (!hueco) return { ok: false, motivo: "Ese horario ya no está libre." };
@@ -250,13 +264,24 @@ export async function accionCliente(localId: string, id: string, tel: string, ac
 export async function subirComprobanteCliente(localId: string, id: string, tel: string, imagenDataUrl: string) {
   const clave = telClave(tel);
   if (!clave) return { ok: false as const, motivo: "Falta el celular del turno." };
+  const loc = await localPorId(localId);
+  if (!loc) return { ok: false as const, motivo: "Local inexistente." };
+  await liberarSenasVencidas(localId, loc.ficha);
   const db = await getDb();
-  const [t] = await db.select().from(turnos).where(and(eq(turnos.id, id), eq(turnos.localId, localId), eq(turnos.telClave, clave), eq(turnos.estado, "pendiente")));
-  if (!t || t.senaMonto <= 0) return { ok: false as const, motivo: "No encontré ese turno pendiente de seña." };
+  const [t] = await db.select().from(turnos).where(and(eq(turnos.id, id), eq(turnos.localId, localId), eq(turnos.telClave, clave)));
+  if (t && t.estado === "cancelado" && t.senaEstado === "pendiente") {
+    return { ok: false as const, motivo: "Ese lugar ya no está reservado: venció el tiempo para mandar la seña o se canceló. Sacá uno nuevo y subí el comprobante enseguida." };
+  }
+  if (!t || t.estado !== "pendiente" || t.senaMonto <= 0) return { ok: false as const, motivo: "No encontré ese turno pendiente de seña." };
   if (t.senaEstado === "recibida") return { ok: true as const };
 
-  const hoy = hoyIso(ahoraAR());
-  const verif = await verificarComprobanteImagen(imagenDataUrl, t.senaMonto, [hoy]);
+  // El mismo archivo no puede usarse como seña de dos turnos.
+  const [repetido] = await db.select({ id: turnos.id }).from(turnos)
+    .where(and(eq(turnos.localId, localId), ne(turnos.id, id), eq(turnos.senaComprobante, imagenDataUrl))).limit(1);
+  if (repetido) return { ok: false as const, motivo: "Ese comprobante ya se usó para otro turno. Subí el de la transferencia de este." };
+
+  const hoy = hoyIso(ahoraAR()), s = loc.ficha.sena;
+  const verif = await verificarComprobanteImagen(imagenDataUrl, t.senaMonto, [hoy], { alias: s.alias, titular: s.titular, nota: s.nota, nombreLocal: loc.ficha.nombre });
   if (!verif.ok) return verif;
 
   await db.update(turnos).set({ senaEstado: "declarada", senaComprobante: imagenDataUrl }).where(eq(turnos.id, t.id));

@@ -49,7 +49,7 @@ export function validarFicha(entrada: Ficha, actual: Ficha): { ok: true; ficha: 
       intervalo: [15, 20, 30, 45, 60].includes(Number(e.intervalo)) ? Number(e.intervalo) : 30,
       anticipacion: num(e.anticipacion, 1, 90, 14), recordatorioHoras: [12, 24, 48].includes(Number(e.recordatorioHoras)) ? Number(e.recordatorioHoras) : 24,
       pedirConfirmacion: e.pedirConfirmacion !== false,
-      sena: { activa: !!sn.activa, obligatoria: !!sn.obligatoria, tipo: pct ? "porcentaje" : "fijo", monto: Math.round(monto), alias: txt(sn.alias, 100), nota: txt(sn.nota, 160) },
+      sena: { activa: !!sn.activa, obligatoria: !!sn.obligatoria, tipo: pct ? "porcentaje" : "fijo", monto: Math.round(monto), alias: txt(sn.alias, 100), nota: txt(sn.nota, 160), titular: txt(sn.titular, 80) },
       fidelidad: { activa: !!fid.activa, cadaCuantos: num(fid.cadaCuantos, 2, 100, 5), premio: txt(fid.premio, 80) },
       whatsappAuto: e.whatsappAuto !== false,
     },

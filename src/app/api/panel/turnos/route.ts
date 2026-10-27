@@ -1,11 +1,12 @@
 import { after } from "next/server";
 import { avisarReserva } from "@/server/whatsapp";
 import { conLocal, error, json } from "@/server/http";
-import { reservar, turnoAtendidoManual, turnosDelLocal } from "@/server/repo";
+import { liberarSenasVencidas, reservar, turnoAtendidoManual, turnosDelLocal } from "@/server/repo";
 
 export async function GET() {
   const l = await conLocal();
   if (!l) return error("Sin sesión.", 401);
+  await liberarSenasVencidas(l.localId, l.ficha).catch(() => 0);
   return json({ ok: true, turnos: await turnosDelLocal(l.localId) });
 }
 /** Agregar a mano: queda como pendiente, o entra directo como atendido si `ya` es true. */
