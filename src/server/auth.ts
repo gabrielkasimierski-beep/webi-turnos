@@ -110,7 +110,8 @@ function remitente() {
   return m ? { nombre: m[1] || "WEBI Turnos", email: m[2].trim() } : { nombre: "WEBI Turnos", email: crudo };
 }
 
-async function enviarMail(destino: string, asunto: string, texto: string, html: string) {
+/** Envía un mail. Devuelve true solo si un proveedor (Brevo/Resend) lo aceptó. En desarrollo sin proveedor, lo loguea y devuelve true. */
+async function enviarMail(destino: string, asunto: string, texto: string, html: string): Promise<boolean> {
   const de = remitente();
   const brevo = process.env.BREVO_API_KEY?.trim();
   if (brevo) {
@@ -118,9 +119,9 @@ async function enviarMail(destino: string, asunto: string, texto: string, html: 
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json", "api-key": brevo },
       body: JSON.stringify({ sender: { name: de.nombre, email: de.email }, to: [{ email: destino }], subject: asunto, textContent: texto, htmlContent: html }),
-    });
-    if (r.ok) return;
-    console.error("[mail] Brevo rechazó el envío:", r.status, await r.text());
+    }).catch(() => null);
+    if (r && r.ok) return true;
+    console.error("[mail] Brevo rechazó el envío:", r?.status, r && (await r.text().catch(() => "")));
   }
   const resend = process.env.RESEND_API_KEY?.trim();
   if (resend) {
@@ -128,19 +129,21 @@ async function enviarMail(destino: string, asunto: string, texto: string, html: 
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: "Bearer " + resend },
       body: JSON.stringify({ from: process.env.MAIL_FROM?.trim() || MAIL_DEFECTO, to: [destino], subject: asunto, text: texto, html }),
-    });
-    if (r.ok) return;
-    console.error("[mail] Resend rechazó el envío:", r.status, await r.text());
+    }).catch(() => null);
+    if (r && r.ok) return true;
+    console.error("[mail] Resend rechazó el envío:", r?.status, r && (await r.text().catch(() => "")));
   }
+  // Sin proveedor configurado: en desarrollo lo mostramos por consola; en producción es un fallo real (falta BREVO_API_KEY / MAIL_FROM).
   console.log(`\n[MAIL -> ${destino}] ${asunto}\n${texto}\n`);
+  return process.env.NODE_ENV !== "production" && !brevo && !resend;
 }
 
-async function enviarCodigo(canal: Canal, destino: string, codigo: string) {
+/** true si el código salió de verdad por su canal. */
+async function enviarCodigo(canal: Canal, destino: string, codigo: string): Promise<boolean> {
   if (canal === "whatsapp") {
-    await enviarCodigoWa(destino, codigo);
-    return;
+    return (await enviarCodigoWa(destino, codigo)).ok;
   }
-  await enviarMail(
+  return enviarMail(
     destino,
     `Tu código de recuperación: ${codigo}`,
     `Tu código para recuperar la contraseña de WEBI Turnos es ${codigo}. Vence en 10 minutos.\n\nSi no lo pediste, ignorá este mail.`,
@@ -261,8 +264,8 @@ export async function pedirCodigo(mailCrudo: string, canal: Canal = "mail") {
   if (ultimo && Date.now() - ultimo.creado.getTime() < 60_000) return { enviado: true, espera: true };
   const codigo = String(randomInt(0, 1_000_000)).padStart(6, "0");
   await db.insert(codigosLogin).values({ id: crypto.randomUUID(), destino: mail, canal, hash: hashCodigo(mail, codigo), expira: new Date(Date.now() + VIGENCIA_CODIGO_MS) });
-  await enviarCodigo(canal, canal === "whatsapp" ? u.whatsapp : mail, codigo);
-  return { enviado: true, canal, devCodigo: process.env.NODE_ENV !== "production" ? codigo : undefined };
+  const ok = await enviarCodigo(canal, canal === "whatsapp" ? u.whatsapp : mail, codigo);
+  return { enviado: ok, falloEnvio: !ok, canal, devCodigo: process.env.NODE_ENV !== "production" ? codigo : undefined };
 }
 
 /** Verifica el código OTP de recuperación, guarda la nueva contraseña, desbloquea la cuenta e invalida sesiones previas. */
