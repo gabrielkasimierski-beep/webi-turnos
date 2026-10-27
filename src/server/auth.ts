@@ -125,11 +125,11 @@ async function transporteSmtp(host: string): Promise<Transporter> {
   return gSmtp.__smtp;
 }
 
-/** Envía un mail por SMTP (Gmail u otro) o por API (Brevo/Resend). Devuelve true solo si un proveedor lo aceptó. En desarrollo sin ninguno, lo loguea y devuelve true. */
+/** Envía un mail por SMTP (Gmail u otro) y, como último respaldo, por Resend. Devuelve true solo si salió. En desarrollo sin ninguno, lo loguea y devuelve true. */
 async function enviarMail(destino: string, asunto: string, texto: string, html: string): Promise<boolean> {
   const de = remitente();
 
-  // 1) SMTP propio (ej. Gmail con app-password): SMTP_HOST=smtp.gmail.com, SMTP_PORT=465, SMTP_USER, SMTP_PASS, MAIL_FROM.
+  // Vía principal: SMTP propio (ej. Gmail con app-password): SMTP_HOST=smtp.gmail.com, SMTP_PORT=465, SMTP_USER, SMTP_PASS, MAIL_FROM.
   const smtpHost = process.env.SMTP_HOST?.trim();
   if (smtpHost) {
     try {
@@ -142,16 +142,7 @@ async function enviarMail(destino: string, asunto: string, texto: string, html: 
     }
   }
 
-  const brevo = process.env.BREVO_API_KEY?.trim();
-  if (brevo) {
-    const r = await fetch("https://api.brevo.com/v3/smtp/email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json", "api-key": brevo },
-      body: JSON.stringify({ sender: { name: de.nombre, email: de.email }, to: [{ email: destino }], subject: asunto, textContent: texto, htmlContent: html }),
-    }).catch(() => null);
-    if (r && r.ok) return true;
-    console.error("[mail] Brevo rechazó el envío:", r?.status, r && (await r.text().catch(() => "")));
-  }
+  // Respaldo opcional: Resend (no se usa Brevo). Solo entra si SMTP no está o falló y hay RESEND_API_KEY.
   const resend = process.env.RESEND_API_KEY?.trim();
   if (resend) {
     const r = await fetch("https://api.resend.com/emails", {
@@ -162,9 +153,9 @@ async function enviarMail(destino: string, asunto: string, texto: string, html: 
     if (r && r.ok) return true;
     console.error("[mail] Resend rechazó el envío:", r?.status, r && (await r.text().catch(() => "")));
   }
-  // Sin proveedor configurado: en desarrollo lo mostramos por consola; en producción es un fallo real (falta BREVO_API_KEY / MAIL_FROM).
+  // Sin proveedor configurado: en desarrollo lo mostramos por consola; en producción es un fallo real (falta SMTP_* / MAIL_FROM).
   console.log(`\n[MAIL -> ${destino}] ${asunto}\n${texto}\n`);
-  return process.env.NODE_ENV !== "production" && !smtpHost && !brevo && !resend;
+  return process.env.NODE_ENV !== "production" && !smtpHost && !resend;
 }
 
 /** true si el código salió de verdad por su canal. */
