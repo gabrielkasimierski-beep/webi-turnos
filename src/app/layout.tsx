@@ -1,9 +1,22 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+const BASE = process.env.NEXT_PUBLIC_BASE_URL?.trim() || "https://webi-turnos.vercel.app";
+
 export const metadata: Metadata = {
-  title: "Asistente de turnos · WEBI",
-  description: "El asistente que saca turnos por vos, 24 horas, desde un QR.",
+  metadataBase: new URL(BASE),
+  title: "Webi · Asistente de turnos",
+  description: "Tus clientes sacan turno solos desde un QR o un link, las 24 horas. Vos ves todo en tu agenda.",
+  openGraph: {
+    title: "Webi · Asistente de turnos",
+    description: "Tus clientes sacan turno solos desde un QR o un link, las 24 horas. Vos ves todo en tu agenda.",
+    url: "/",
+    siteName: "Webi",
+    images: [{ url: "/api/og", width: 1200, height: 630 }],
+    locale: "es_AR",
+    type: "website",
+  },
+  twitter: { card: "summary_large_image", title: "Webi · Asistente de turnos", images: ["/api/og"] },
 };
 export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover" };
 

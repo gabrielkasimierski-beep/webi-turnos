@@ -40,12 +40,29 @@ export const RUBROS: Record<string, Rubro> = {
     recursos: ["Mesa 1", "Mesa 2", "Mesa 3", "Mesa 4", "Mesa 5"], servicios: [["Mesa para 2", 0, 90, "2 personas, dos personas, pareja, somos 2, somos dos"], ["Mesa para 4", 0, 90, "4 personas, cuatro personas, somos 4, somos cuatro"], ["Mesa para 6", 0, 120, "6 personas, seis personas, somos 6, somos seis"]],
     horarios: semana("20:00", "23:59", [0, 2, 3, 4, 5, 6]),
     faqs: [["¿Tienen platos sin TACC?", "Tenemos algunos platos sin TACC. Avisanos al reservar."], ["¿Se puede ir con mascota?", "Sí, en las mesas de la vereda."]] },
+  spa: { rubro: "Spa y masajes", nombre: "Spa Serena", color: "#4C7A6B", palabra: "turno", recurso: "profesional",
+    recursos: ["Sala 1", "Sala 2"], servicios: [["Masaje relajante", 18000, 60, "relajante, relax, masaje"], ["Masaje descontracturante", 20000, 60, "descontracturante, contractura, espalda"], ["Piedras calientes", 24000, 75, "piedras, hot stone"], ["Drenaje linfático", 22000, 60, "drenaje, linfático"]],
+    horarios: semana("10:00", "20:00", [1, 2, 3, 4, 5, 6]),
+    faqs: [["¿Tengo que llevar algo?", "No, te damos toallas y todo lo necesario. Vení con ropa cómoda."], ["¿Puedo regalar una sesión?", "Sí, tenemos gift card. Consultanos."]] },
+  tattoo: { rubro: "Estudio de tatuajes", nombre: "Tinta Norte", color: "#2B2B33", palabra: "turno", recurso: "artista",
+    recursos: ["Lu", "Tom"], servicios: [["Consulta y diseño", 0, 30, "consulta, diseño, presupuesto, idea"], ["Tatuaje chico", 25000, 60, "chico, pequeño, mini"], ["Tatuaje mediano", 45000, 120, "mediano"], ["Piercing", 15000, 30, "aro, perforación, piercing"]],
+    horarios: semana("12:00", "20:00", [2, 3, 4, 5, 6]),
+    faqs: [["¿Duele?", "Depende de la zona, pero lo hacemos lo más llevadero posible."], ["¿Cómo cuido el tatuaje?", "Te damos todas las indicaciones al terminar."]] },
+  veterinaria: { rubro: "Veterinaria", nombre: "Veterinaria Patitas", color: "#2F6FA8", palabra: "turno", recurso: "veterinario",
+    recursos: ["Dr. Sosa", "Dra. Luna"], servicios: [["Consulta", 12000, 30, "consulta, control, revisar"], ["Vacunación", 10000, 20, "vacuna, vacunas, vacunar"], ["Baño y corte", 14000, 60, "baño, peluquería, corte"], ["Castración", 45000, 90, "castrar, castración, esterilizar"]],
+    horarios: semana("09:00", "19:00", [1, 2, 3, 4, 5, 6]),
+    faqs: [["¿Atienden urgencias?", "Para urgencias llamanos directo, te damos prioridad."], ["¿Puedo llevar más de una mascota?", "Sí, sacá un turno por cada una así nos organizamos."]] },
+  odontologia: { rubro: "Consultorio odontológico", nombre: "Odonto Sonrisa", color: "#2C8C9B", palabra: "turno", recurso: "profesional",
+    recursos: ["Dra. Vera", "Dr. Pérez"], servicios: [["Consulta", 12000, 30, "consulta, control, revisación"], ["Limpieza", 18000, 45, "limpieza, sarro, profilaxis"], ["Arreglo / caries", 25000, 60, "caries, arreglo, empaste, tapar"], ["Blanqueamiento", 40000, 90, "blanqueamiento, blanquear, blanqueo"]],
+    horarios: semana("08:00", "20:00", [1, 2, 3, 4, 5]),
+    faqs: [["¿Atienden por obra social?", "Trabajamos en forma particular y te damos factura para el reintegro."], ["¿Atienden niños?", "Sí, atendemos a toda la familia."]] },
 };
 
-/** Seña de ejemplo por rubro: solo canchas y restaurantes la piden. */
+/** Seña de ejemplo por rubro: canchas, restaurantes y tatuajes la piden. */
 const SENAS: Record<string, Sena> = {
   cancha: { activa: true, obligatoria: true, tipo: "fijo", monto: 5000, alias: "padelclubsur.mp", nota: "Se descuenta del total al jugar." },
   resto: { activa: true, obligatoria: false, tipo: "fijo", monto: 3000, alias: "donarosa.mp", nota: "Por persona, se descuenta del consumo." },
+  tattoo: { activa: true, obligatoria: true, tipo: "fijo", monto: 10000, alias: "tintanorte.mp", nota: "Se descuenta del total del trabajo." },
 };
 
 function idsUnicos(nombres: string[]) {

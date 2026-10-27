@@ -12,13 +12,20 @@ export async function generateMetadata({ params }: P): Promise<Metadata> {
   if (!loc) return { title: "Local no encontrado" };
   const s = encodeURIComponent(loc.ficha.slug);
   const iconoUrl = `/api/icono?slug=${s}&s=512`;
+  const ogUrl = `/api/og?slug=${s}`;
+  const esReserva = loc.ficha.palabra === "reserva";
+  const titulo = `${loc.ficha.nombre} · ${esReserva ? "Reservas" : "Turnos"} online`;
+  const desc = `Sacá ${esReserva ? "tu reserva" : "tu turno"} en ${loc.ficha.nombre} desde el chat, las 24 horas. Con tecnología Webi.`;
   return {
-    title: `${loc.ficha.nombre} · ${loc.ficha.palabra === "reserva" ? "Reservas" : "Turnos"}`,
+    title: titulo,
+    description: desc,
     manifest: `/api/manifest?slug=${s}`,
     icons: {
       icon: iconoUrl,
       apple: iconoUrl,
     },
+    openGraph: { title: titulo, description: desc, url: `/${loc.ficha.slug}`, siteName: "Webi", images: [{ url: ogUrl, width: 1200, height: 630 }], locale: "es_AR", type: "website" },
+    twitter: { card: "summary_large_image", title: titulo, description: desc, images: [ogUrl] },
     appleWebApp: {
       capable: true,
       title: loc.ficha.nombre,
