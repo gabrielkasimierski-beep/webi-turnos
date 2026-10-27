@@ -8,6 +8,7 @@
 import { createHash, createHmac, randomBytes, randomInt, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { and, desc, eq, gt } from "drizzle-orm";
+import type { Transporter } from "nodemailer";
 import { getDb, schema } from "@/db";
 import { enviarCodigoWa, waDisponible } from "./whatsapp";
 
@@ -110,9 +111,37 @@ function remitente() {
   return m ? { nombre: m[1] || "WEBI Turnos", email: m[2].trim() } : { nombre: "WEBI Turnos", email: crudo };
 }
 
-/** Envía un mail. Devuelve true solo si un proveedor (Brevo/Resend) lo aceptó. En desarrollo sin proveedor, lo loguea y devuelve true. */
+/** Transporte SMTP reusado (p. ej. Gmail con contraseña de aplicación). Se crea una sola vez. */
+const gSmtp = globalThis as unknown as { __smtp?: Transporter };
+async function transporteSmtp(host: string): Promise<Transporter> {
+  if (!gSmtp.__smtp) {
+    const nodemailer = (await import("nodemailer")).default;
+    const port = Number(process.env.SMTP_PORT) || 465;
+    gSmtp.__smtp = nodemailer.createTransport({
+      host, port, secure: port === 465, // 465 = SSL; 587 = STARTTLS
+      auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER.trim(), pass: (process.env.SMTP_PASS || "").replace(/\s+/g, "") } : undefined,
+    });
+  }
+  return gSmtp.__smtp;
+}
+
+/** Envía un mail por SMTP (Gmail u otro) o por API (Brevo/Resend). Devuelve true solo si un proveedor lo aceptó. En desarrollo sin ninguno, lo loguea y devuelve true. */
 async function enviarMail(destino: string, asunto: string, texto: string, html: string): Promise<boolean> {
   const de = remitente();
+
+  // 1) SMTP propio (ej. Gmail con app-password): SMTP_HOST=smtp.gmail.com, SMTP_PORT=465, SMTP_USER, SMTP_PASS, MAIL_FROM.
+  const smtpHost = process.env.SMTP_HOST?.trim();
+  if (smtpHost) {
+    try {
+      const t = await transporteSmtp(smtpHost);
+      await t.sendMail({ from: process.env.MAIL_FROM?.trim() || `${de.nombre} <${de.email}>`, to: destino, subject: asunto, text: texto, html });
+      return true;
+    } catch (e) {
+      gSmtp.__smtp = undefined; // si el transporte quedó mal, que se recree
+      console.error("[mail] SMTP rechazó el envío:", e instanceof Error ? e.message : e);
+    }
+  }
+
   const brevo = process.env.BREVO_API_KEY?.trim();
   if (brevo) {
     const r = await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -135,7 +164,7 @@ async function enviarMail(destino: string, asunto: string, texto: string, html: 
   }
   // Sin proveedor configurado: en desarrollo lo mostramos por consola; en producción es un fallo real (falta BREVO_API_KEY / MAIL_FROM).
   console.log(`\n[MAIL -> ${destino}] ${asunto}\n${texto}\n`);
-  return process.env.NODE_ENV !== "production" && !brevo && !resend;
+  return process.env.NODE_ENV !== "production" && !smtpHost && !brevo && !resend;
 }
 
 /** true si el código salió de verdad por su canal. */
