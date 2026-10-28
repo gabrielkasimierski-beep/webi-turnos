@@ -8,6 +8,7 @@ import { aMin, ahoraAR, desdeIso, diasAbiertos, dig, hoyIso, iso, libres, pideSe
 import type { Ficha, Ocupacion, ResumenCliente, Turno } from "@/lib/tipos";
 import { armarFicha } from "@/lib/rubros";
 import { verificarComprobanteImagen } from "./comprobante";
+import { validarTextoComprobante } from "@/lib/comprobante";
 
 const { locales, recursos, servicios, turnos, clientes, usuarios } = schema;
 const nuevoId = (pref = "") => pref + crypto.randomUUID().replace(/-/g, "").slice(0, 16);
@@ -260,8 +261,9 @@ export async function accionCliente(localId: string, id: string, tel: string, ac
   return true;
 }
 
-/** Verifica el comprobante de seña subido por el cliente (importe + fecha de hoy) y, si coincide, marca la seña como declarada. */
-export async function subirComprobanteCliente(localId: string, id: string, tel: string, imagenDataUrl: string) {
+/** Verifica el comprobante de seña subido por el cliente y, si coincide (importe + fecha + destinatario), marca la seña como "declarada".
+    `texto` es el OCR hecho en el celular del cliente: si viene, se valida ese texto (rápido); si no, el servidor lee la imagen (respaldo). */
+export async function subirComprobanteCliente(localId: string, id: string, tel: string, imagenDataUrl: string, texto?: string) {
   const clave = telClave(tel);
   if (!clave) return { ok: false as const, motivo: "Falta el celular del turno." };
   const loc = await localPorId(localId);
@@ -281,7 +283,12 @@ export async function subirComprobanteCliente(localId: string, id: string, tel: 
   if (repetido) return { ok: false as const, motivo: "Ese comprobante ya se usó para otro turno. Subí el de la transferencia de este." };
 
   const hoy = hoyIso(ahoraAR()), s = loc.ficha.sena;
-  const verif = await verificarComprobanteImagen(imagenDataUrl, t.senaMonto, [hoy], { alias: s.alias, titular: s.titular, nota: s.nota, nombreLocal: loc.ficha.nombre });
+  const destino = { alias: s.alias, titular: s.titular, nota: s.nota, nombreLocal: loc.ficha.nombre };
+  const textoCliente = typeof texto === "string" ? texto.replace(/\s+/g, " ").trim() : "";
+  // OCR en el celular del cliente (rápido y sin depender del servidor); si no vino, lo lee el servidor como respaldo.
+  const verif = textoCliente.replace(/[^0-9a-zñáéíóú]/gi, "").length >= 12
+    ? validarTextoComprobante(textoCliente, t.senaMonto, [hoy], destino)
+    : await verificarComprobanteImagen(imagenDataUrl, t.senaMonto, [hoy], destino);
   if (!verif.ok) return verif;
 
   await db.update(turnos).set({ senaEstado: "declarada", senaComprobante: imagenDataUrl }).where(eq(turnos.id, t.id));

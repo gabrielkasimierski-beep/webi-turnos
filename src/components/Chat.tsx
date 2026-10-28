@@ -37,6 +37,21 @@ function prepararComprobante(file: File): Promise<string> {
   });
 }
 
+/** Lee el texto del comprobante EN EL CELULAR del cliente (tesseract.js en el navegador).
+    Así el servidor no corre OCR (evita los cortes por timeout en Vercel). El worker se reusa. */
+let ocrWorker: Promise<import("tesseract.js").Worker> | null = null;
+async function leerComprobanteEnCelular(dataUrl: string): Promise<string> {
+  if (!ocrWorker) ocrWorker = import("tesseract.js").then(({ createWorker }) => createWorker("spa"));
+  try {
+    const w = await ocrWorker;
+    const { data } = await w.recognize(dataUrl);
+    return data.text || "";
+  } catch {
+    ocrWorker = null; // si falló, que se recree la próxima
+    return "";
+  }
+}
+
 type Msg = { id: number; quien: "bot" | "yo"; html: string };
 type Chip = { texto: string; lleno?: boolean; eco?: boolean; hacer: () => void };
 type Parte = string | { chips: Chip[] } | { html: string };
@@ -1442,7 +1457,9 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
     }
     burbuja("yo", '📎 Comprobante enviado<br><img src="' + escA(dataUrl) + '" alt="Comprobante" style="max-width:180px;max-height:220px;border-radius:10px;margin-top:6px;display:block;border:1px solid rgba(255,255,255,.25)" />');
     setEscribiendo((n) => n + 1);
-    const r = await api(`/turno/${pend.t.id}`, { tel: pend.tel, accion: "comprobante", comprobante: dataUrl });
+    // El OCR corre acá, en el celular del cliente; si falla, el servidor lo lee como respaldo.
+    const texto = await leerComprobanteEnCelular(dataUrl);
+    const r = await api(`/turno/${pend.t.id}`, { tel: pend.tel, accion: "comprobante", comprobante: dataUrl, texto });
     setEscribiendo((n) => n - 1);
     if (!r.ok) {
       burbuja("bot", "⚠️ " + esc(r.motivo || "No pude verificar el comprobante. Intentá con otra captura."));

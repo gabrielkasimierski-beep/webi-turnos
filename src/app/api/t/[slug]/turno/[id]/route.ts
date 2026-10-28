@@ -20,7 +20,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
     if (!rateLimit("comp:" + ipDe(req), 8, 60_000)) {
       return error("Demasiados intentos seguidos. Esperá un minuto y probá de nuevo.", 429);
     }
-    const r = await subirComprobanteCliente(loc.localId, id, String(b.tel || ""), String(b.comprobante || ""));
+    const r = await subirComprobanteCliente(loc.localId, id, String(b.tel || ""), String(b.comprobante || ""), typeof b.texto === "string" ? b.texto : undefined);
     if (r.ok) {
       await Promise.race([
         enviarPushLocal(loc.localId, {
