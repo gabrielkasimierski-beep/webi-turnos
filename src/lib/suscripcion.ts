@@ -4,7 +4,7 @@
    cartel del panel y el chequeo diario del cron usan exactamente la misma regla.
    ===================================================================== */
 
-export const DIAS_PRUEBA = 10;
+export const DIAS_PRUEBA = 21;
 
 /** Datos de cobro de WEBI que se muestran en el cartel (Mercado Pago de Gabriel). */
 export const COBRO = {
