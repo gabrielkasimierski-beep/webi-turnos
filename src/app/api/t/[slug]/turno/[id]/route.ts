@@ -3,7 +3,8 @@ import { conSlug, error, ipDe, json, rateLimit } from "@/server/http";
 import { enviarPushLocal } from "@/server/push";
 import { accionCliente, subirComprobanteCliente } from "@/server/repo";
 
-export const maxDuration = 30;
+// El OCR del comprobante (tesseract) en el primer uso tras un arranque en frío puede tardar ~30-40 s; damos margen (máx. en plan Hobby).
+export const maxDuration = 60;
 
 export async function POST(req: Request, { params }: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await params;
