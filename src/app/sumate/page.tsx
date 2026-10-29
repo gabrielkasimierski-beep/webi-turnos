@@ -15,7 +15,13 @@ export default function Sumate() {
   return (
     <main
       className="sumate"
-      style={{ ["--brand" as string]: "#2BA77E", ["--brand-ink" as string]: "#FFFFFF", width: "min(560px,100%)", margin: "auto", display: "grid", gap: 16, paddingBlock: 8 }}
+      style={{
+        ["--brand" as string]: "#2BA77E",
+        ["--brand-ink" as string]: "#FFFFFF",
+        ["--brand-text" as string]: "color-mix(in srgb,#2BA77E 68%,var(--ink))",
+        ["--brand-soft" as string]: "color-mix(in srgb,#2BA77E 14%,var(--surface))",
+        width: "min(560px,100%)", margin: "auto", display: "grid", gap: 16, paddingBlock: 8,
+      }}
     >
       <header style={{ display: "grid", gap: 14, textAlign: "center", justifyItems: "center" }}>
         <MarcaWebi fontSize="2.5rem" />
