@@ -56,7 +56,7 @@ export default function Sumate() {
         <Link className="btn pri" href="/registro" style={{ textAlign: "center", padding: 14, fontSize: "1.05rem", fontWeight: 700 }}>
           Crear mi cuenta gratis
         </Link>
-        <Link className="btn" href="/t/barberia-el-faro" style={{ textAlign: "center", padding: 12 }}>
+        <Link className="btn" href="/t/barberia-el-faro" style={{ textAlign: "center", padding: 12, color: "var(--ink)" }}>
           Ver una demo real
         </Link>
         <a className="enlace" href={wa} style={{ textAlign: "center", fontSize: ".9rem" }}>
