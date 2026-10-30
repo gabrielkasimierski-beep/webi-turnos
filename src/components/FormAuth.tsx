@@ -7,7 +7,7 @@ import MarcaWebi from "@/components/MarcaWebi";
 
 export default function FormAuth({ modo }: { modo: "login" | "registro" }) {
   const [paso, setPaso] = useState<"clave" | "olvide" | "codigo">("clave");
-  const [mail, setMail] = useState(""), [clave, setClave] = useState(""), [nombre, setNombre] = useState(""), [rubro, setRubro] = useState("barberia"), [codigo, setCodigo] = useState("");
+  const [mail, setMail] = useState(""), [clave, setClave] = useState(""), [clave2, setClave2] = useState(""), [nombre, setNombre] = useState(""), [rubro, setRubro] = useState("barberia"), [codigo, setCodigo] = useState("");
   const [error, setError] = useState(""), [aviso, setAviso] = useState(""), [ocupado, setOcupado] = useState(false);
 
   async function post(ruta: string, cuerpo: unknown) {
@@ -16,7 +16,9 @@ export default function FormAuth({ modo }: { modo: "login" | "registro" }) {
   }
 
   async function enviarClave(e: FormEvent) {
-    e.preventDefault(); setError(""); setOcupado(true);
+    e.preventDefault(); setError("");
+    if (modo === "registro" && clave !== clave2) return setError("Las contraseñas no coinciden.");
+    setOcupado(true);
     const r = modo === "registro"
       ? await post("/api/registro", { mail, nombre, rubro, clave })
       : await post("/api/auth/verificar", { mail, clave });
@@ -30,12 +32,14 @@ export default function FormAuth({ modo }: { modo: "login" | "registro" }) {
     setOcupado(false);
     if (!r.ok) return setError(r.motivo || "No se pudo enviar el código.");
     setAviso(r.devCodigo ? "Modo desarrollo: tu código es " + r.devCodigo + " (en producción llega por mail)." : r.canal === "whatsapp" ? "Te mandamos el código por WhatsApp." : "Si el mail está registrado, te mandamos un código de 6 números a " + mail + ".");
-    setClave("");
+    setClave(""); setClave2("");
     setPaso("codigo");
   }
 
   async function guardarNuevaClave(e: FormEvent) {
-    e.preventDefault(); setError(""); setOcupado(true);
+    e.preventDefault(); setError("");
+    if (clave !== clave2) return setError("Las contraseñas no coinciden.");
+    setOcupado(true);
     const r = await post("/api/auth/verificar", { modo: "recuperar", mail, codigo, nuevaClave: clave });
     if (!r.ok) { setOcupado(false); return setError(r.motivo || "Código incorrecto."); }
     window.location.href = "/panel";
@@ -59,6 +63,9 @@ export default function FormAuth({ modo }: { modo: "login" | "registro" }) {
             )}
             <input type="email" inputMode="email" autoComplete="email" placeholder="Tu mail" value={mail} onChange={(e) => setMail(e.target.value)} required aria-label="Tu mail" />
             <input type="password" autoComplete={modo === "registro" ? "new-password" : "current-password"} minLength={8} placeholder={modo === "registro" ? "Elegí una contraseña (mín. 8 caracteres)" : "Tu contraseña"} value={clave} onChange={(e) => setClave(e.target.value)} required aria-label="Contraseña" />
+            {modo === "registro" && (
+              <input type="password" autoComplete="new-password" minLength={8} placeholder="Repetí la contraseña" value={clave2} onChange={(e) => setClave2(e.target.value)} required aria-label="Repetir contraseña" />
+            )}
             {error && <p className="nota mal">{error}</p>}
             <button className="btn pri" disabled={ocupado}>{ocupado ? "Ingresando…" : modo === "registro" ? "Crear mi local y entrar" : "Entrar"}</button>
             {modo === "login" && (
@@ -85,8 +92,9 @@ export default function FormAuth({ modo }: { modo: "login" | "registro" }) {
             <p className="nota ok">{aviso}</p>
             <input inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="Código de 6 números" value={codigo} onChange={(e) => setCodigo(e.target.value.replace(/\D/g, ""))} required aria-label="Código" style={{ letterSpacing: ".3em", textAlign: "center", fontSize: "1.4rem" }} />
             <input type="password" autoComplete="new-password" minLength={8} placeholder="Nueva contraseña (mín. 8 caracteres)" value={clave} onChange={(e) => setClave(e.target.value)} required aria-label="Nueva contraseña" />
+            <input type="password" autoComplete="new-password" minLength={8} placeholder="Repetí la nueva contraseña" value={clave2} onChange={(e) => setClave2(e.target.value)} required aria-label="Repetir nueva contraseña" />
             {error && <p className="nota mal">{error}</p>}
-            <button className="btn pri" disabled={ocupado || codigo.length !== 6 || clave.length < 8}>{ocupado ? "Guardando…" : "Guardar contraseña y entrar"}</button>
+            <button className="btn pri" disabled={ocupado || codigo.length !== 6 || clave.length < 8 || clave2.length < 8}>{ocupado ? "Guardando…" : "Guardar contraseña y entrar"}</button>
             <button type="button" className="btn" disabled={ocupado} onClick={() => pedirRecupero(undefined, "whatsapp")}>Mandármelo por WhatsApp</button>
             <button type="button" className="btn" onClick={() => { setPaso("clave"); setCodigo(""); setError(""); }}>Volver</button>
           </form>
