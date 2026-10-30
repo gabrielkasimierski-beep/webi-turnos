@@ -38,6 +38,7 @@ export const usuarios = pgTable(
     mail: text("mail").notNull(),
     claveHash: text("clave_hash").notNull().default(""),
     intentosFallidos: integer("intentos_fallidos").notNull().default(0),
+    ultimoFallo: timestamp("ultimo_fallo", { withTimezone: true }), // para la ventana deslizante: los fallos de hace +15 min no cuentan
     bloqueadoHasta: timestamp("bloqueado_hasta", { withTimezone: true }),
     whatsapp: text("whatsapp").notNull().default(""), // para el OTP por WhatsApp (Fase 2)
     rol: text("rol").notNull().default("dueno"), // dueno | empleado

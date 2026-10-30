@@ -218,10 +218,12 @@ export async function ingresarConClave(
   }
 
   if (!verificarClave(clave, u.claveHash)) {
-    const intentos = (u.intentosFallidos || 0) + 1;
+    // Ventana deslizante: si el último fallo fue hace más de 15 min, el contador se renueva (los intentos viejos no suman).
+    const fallosVigentes = u.ultimoFallo && ahora.getTime() - u.ultimoFallo.getTime() < BLOQUEO_CLAVE_MS ? u.intentosFallidos || 0 : 0;
+    const intentos = fallosVigentes + 1;
     if (intentos >= MAX_INTENTOS_CLAVE) {
       const hasta = new Date(Date.now() + BLOQUEO_CLAVE_MS);
-      await db.update(usuarios).set({ intentosFallidos: 0, bloqueadoHasta: hasta }).where(eq(usuarios.id, u.id));
+      await db.update(usuarios).set({ intentosFallidos: 0, ultimoFallo: ahora, bloqueadoHasta: hasta }).where(eq(usuarios.id, u.id));
       await enviarAlertaSeguridad(
         u.id,
         "Acceso bloqueado por intentos fallidos",
@@ -233,7 +235,7 @@ export async function ingresarConClave(
         motivo: "Superaste los 5 intentos fallidos. Bloqueamos la cuenta por 15 minutos y enviamos una alerta al dueño.",
       };
     }
-    await db.update(usuarios).set({ intentosFallidos: intentos }).where(eq(usuarios.id, u.id));
+    await db.update(usuarios).set({ intentosFallidos: intentos, ultimoFallo: ahora }).where(eq(usuarios.id, u.id));
     const restantes = MAX_INTENTOS_CLAVE - intentos;
     return {
       ok: false,
@@ -241,8 +243,8 @@ export async function ingresarConClave(
     };
   }
 
-  if (u.intentosFallidos > 0 || u.bloqueadoHasta) {
-    await db.update(usuarios).set({ intentosFallidos: 0, bloqueadoHasta: null }).where(eq(usuarios.id, u.id));
+  if (u.intentosFallidos > 0 || u.bloqueadoHasta || u.ultimoFallo) {
+    await db.update(usuarios).set({ intentosFallidos: 0, ultimoFallo: null, bloqueadoHasta: null }).where(eq(usuarios.id, u.id));
   }
 
   return {
