@@ -283,6 +283,13 @@ export async function editarTurno(localId: string, id: string, e: EdicionTurno):
   }
 }
 
+/** Borra un turno del local de forma definitiva (p. ej. una carga de prueba o un error). No deja rastro. */
+export async function eliminarTurno(localId: string, id: string): Promise<boolean> {
+  const db = await getDb();
+  const filas = await db.delete(turnos).where(and(eq(turnos.id, id), eq(turnos.localId, localId))).returning({ id: turnos.id });
+  return filas.length > 0;
+}
+
 /* ---------- lo que hace el cliente (identificado por teléfono) ---------- */
 export async function misTurnos(localId: string, tel: string): Promise<Turno[]> {
   const clave = telClave(tel); if (!clave) return [];

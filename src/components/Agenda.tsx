@@ -139,6 +139,7 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
   const [verComp, setVerComp] = useState<string | null>(null);
   const [confirmar, setConfirmar] = useState<string | null>(null);
   const [editando, setEditando] = useState<string | null>(null);
+  const [borrando, setBorrando] = useState<string | null>(null);
   const [agregando, setAgregando] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [error, setError] = useState("");
@@ -296,6 +297,13 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
     const r = await fetch("/api/panel/turnos/" + id, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(cambios) }).then((x) => x.json()).catch(() => ({ ok: false }));
     if (!r.ok) setError("No se pudo guardar el cambio. Probá de nuevo.");
     await cargar();
+  }
+
+  async function borrar(id: string) {
+    setError("");
+    const r = await fetch("/api/panel/turnos/" + id, { method: "DELETE" }).then((x) => x.json()).catch(() => ({ ok: false }));
+    if (!r.ok) return setError("No se pudo eliminar el turno. Probá de nuevo.");
+    setBorrando(null); setAbierto(null); await cargar();
   }
 
   // fidelidad del cliente del turno abierto
@@ -522,6 +530,7 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
                     )}
                     {t.nota && <span className="nota" style={{ width: "100%" }}>📝 {t.nota}</span>}
                     {t.estado !== "cancelado" && <button className="btn" onClick={() => setEditando(t.id)}>✏️ Editar</button>}
+                    <button className="btn peligro" onClick={() => { if (borrando !== t.id) return setBorrando(t.id); borrar(t.id); }}>{borrando === t.id ? "¿Seguro? Se borra para siempre" : "🗑 Eliminar"}</button>
                   </div>
                 ))}
               </div>

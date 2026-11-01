@@ -1,5 +1,5 @@
 import { conLocal, error, json } from "@/server/http";
-import { cambiarTurno, editarTurno, type Cambios, type EdicionTurno } from "@/server/repo";
+import { cambiarTurno, editarTurno, eliminarTurno, type Cambios, type EdicionTurno } from "@/server/repo";
 
 const CAMPOS_EDICION = ["nombre", "tel", "nota", "servicioId", "recursoId", "fecha", "hora"] as const;
 
@@ -20,4 +20,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const ok = await cambiarTurno(l.localId, id, { estado: b.estado, pago: b.pago, confirmado: b.confirmado, recordado: b.recordado, senaEstado: b.senaEstado }).catch(() => false);
   return ok ? json({ ok: true }) : error("No se pudo guardar el cambio.", 409);
+}
+
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const l = await conLocal();
+  if (!l) return error("Sin sesión.", 401);
+  const ok = await eliminarTurno(l.localId, (await params).id).catch(() => false);
+  return ok ? json({ ok: true }) : error("No encontré ese turno.", 404);
 }
