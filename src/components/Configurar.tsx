@@ -172,7 +172,11 @@ export default function Configurar({ ficha, onGuardada }: { ficha: Ficha; onGuar
         <label className="check"><input type="checkbox" checked={b.fidelidad.activa} onChange={(e) => upd((x) => { x.fidelidad.activa = e.target.checked; })} /> Activar el programa</label>
         {b.fidelidad.activa && <div className="campos">
           <label className="c">Premio cada cuántas visitas<input className="num" type="number" min={2} max={100} value={b.fidelidad.cadaCuantos} onChange={(e) => upd((x) => { x.fidelidad.cadaCuantos = Number(e.target.value); })} /></label>
-          <label className="c">Premio (ej. “un corte gratis”)<input value={b.fidelidad.premio} autoComplete="off" onChange={(e) => upd((x) => { x.fidelidad.premio = e.target.value; })} /></label>
+          <label className="c">Premio (ej. “un corte gratis”)<input value={b.fidelidad.premio} autoComplete="off" list="premios-sugeridos" placeholder="Elegí un servicio o escribí el premio" onChange={(e) => upd((x) => { x.fidelidad.premio = e.target.value; })} />
+            <datalist id="premios-sugeridos">
+              {b.servicios.filter((s) => s.nombre.trim()).map((s, i) => <option key={i} value={`${s.nombre.trim()} gratis`} />)}
+            </datalist>
+          </label>
         </div>}
       </section>
 
