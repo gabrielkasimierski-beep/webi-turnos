@@ -106,6 +106,7 @@ export const turnos = pgTable(
     nombre: text("nombre").notNull().default(""),
     tel: text("tel").notNull().default(""),
     telClave: text("tel_clave").notNull().default(""), // últimos 8 dígitos: identidad del cliente
+    nota: text("nota").notNull().default(""), // nota interna del local sobre el turno (no la ve el cliente)
     estado: text("estado").notNull().default("pendiente"), // pendiente | atendido | no_vino | cancelado
     pago: text("pago"),
     senaMonto: integer("sena_monto").notNull().default(0),

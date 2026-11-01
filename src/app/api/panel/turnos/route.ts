@@ -15,7 +15,7 @@ export async function POST(req: Request) {
   if (!l) return error("Sin sesión.", 401);
   const b = await req.json().catch(() => null);
   if (!b) return error("Pedido inválido.");
-  const base = { servicioId: String(b.servicioId || ""), fecha: String(b.fecha || ""), hora: String(b.hora || ""), nombre: b.nombre, tel: b.tel };
+  const base = { servicioId: String(b.servicioId || ""), fecha: String(b.fecha || ""), hora: String(b.hora || ""), nombre: b.nombre, tel: b.tel, nota: b.nota };
   if (b.ya) {
     const r = await turnoAtendidoManual(l.localId, { ...base, recursoId: String(b.recursoId || ""), pago: String(b.pago || "Efectivo") });
     return json(r, r.ok ? 200 : 400);

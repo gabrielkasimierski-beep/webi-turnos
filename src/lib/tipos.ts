@@ -48,6 +48,7 @@ export type Turno = {
   recursoNombre: string;
   nombre: string;
   tel: string;
+  nota: string;
   estado: EstadoTurno;
   pago: string | null;
   sena: { monto: number; estado: EstadoSena; comprobante?: string | null };

@@ -138,6 +138,7 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
   const [abierto, setAbierto] = useState<string | null>(null);
   const [verComp, setVerComp] = useState<string | null>(null);
   const [confirmar, setConfirmar] = useState<string | null>(null);
+  const [editando, setEditando] = useState<string | null>(null);
   const [agregando, setAgregando] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [error, setError] = useState("");
@@ -476,7 +477,7 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
             return (
               <div key={t.id} className={"turno" + (apagado ? " apagado" : "")}>
                 <div className="hora">{t.hora}</div>
-                <div className="info"><b>{t.nombre || "Sin nombre"}</b><span>{t.servicioNombre} · {t.recursoNombre}{verFecha ? " · " + etiquetaDia(t.fecha) : ""}<span className="origen">{t.origen === "chat" ? "por el chat" : "cargado en el local"}</span></span></div>
+                <div className="info"><b>{t.nombre || "Sin nombre"}</b><span>{t.servicioNombre} · {t.recursoNombre}{verFecha ? " · " + etiquetaDia(t.fecha) : ""}<span className="origen">{t.origen === "chat" ? "por el chat" : "cargado en el local"}</span>{t.nota ? <span className="origen"> · 📝</span> : null}</span></div>
                 <button className={"pill " + ev} aria-expanded={abre} onClick={() => { setAbierto(abre ? null : t.id); setConfirmar(null); }}>{NOMBRE_ESTADO[ev]}{t.estado === "atendido" && t.pago ? " · " + t.pago : ""}</button>
                 {t.estado !== "cancelado" && (t.confirmado || sn) && (
                   <div className="marcas">
@@ -484,7 +485,9 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
                     {sn && <span className={"pill " + ({ pendiente: "pendiente", declarada: "warn", recibida: "atendido" } as Record<string, string>)[sn.estado]}>{({ pendiente: "Seña ⏳", declarada: "Seña por confirmar 🧾", recibida: "Seña ✓" } as Record<string, string>)[sn.estado]} {plata(sn.monto)}</span>}
                   </div>
                 )}
-                {abre && (
+                {abre && (editando === t.id ? (
+                  <FormEditar ficha={ficha} turnos={turnos} t={t} onListo={() => { setEditando(null); setAbierto(null); cargar(); }} onCancelar={() => setEditando(null)} />
+                ) : (
                   <div className="acc">
                     {t.estado === "pendiente" ? (
                       <>
@@ -517,8 +520,10 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
                           : <>Le faltan {ficha.fidelidad.cadaCuantos - (fid.visitas % ficha.fidelidad.cadaCuantos)} para el próximo.</>}
                       </div>
                     )}
+                    {t.nota && <span className="nota" style={{ width: "100%" }}>📝 {t.nota}</span>}
+                    {t.estado !== "cancelado" && <button className="btn" onClick={() => setEditando(t.id)}>✏️ Editar</button>}
                   </div>
-                )}
+                ))}
               </div>
             );
           })}
@@ -530,7 +535,7 @@ export default function Agenda({ ficha }: { ficha: Ficha }) {
 
 function FormAgregar({ ficha, turnos, fecha, onListo }: { ficha: Ficha; turnos: Turno[]; fecha: string; onListo: () => void }) {
   const [nombre, setNombre] = useState(""), [tel, setTel] = useState(""), [srvId, setSrvId] = useState(ficha.servicios[0]?.id || ""), [recId, setRecId] = useState(ficha.recursos[0]?.id || "");
-  const [ya, setYa] = useState(true), [pago, setPago] = useState(PAGOS[0]), [hora, setHora] = useState(""), [nota, setNota] = useState(""), [guardando, setGuardando] = useState(false);
+  const [ya, setYa] = useState(true), [pago, setPago] = useState(PAGOS[0]), [hora, setHora] = useState(""), [notaTxt, setNotaTxt] = useState(""), [err, setErr] = useState(""), [guardando, setGuardando] = useState(false);
   const srv = ficha.servicios.find((s) => s.id === srvId);
   const horas = useMemo(() => {
     if (ya) { const a = new Date(); return [aHora(Math.floor((a.getHours() * 60 + a.getMinutes()) / 5) * 5)]; }
@@ -540,11 +545,11 @@ function FormAgregar({ ficha, turnos, fecha, onListo }: { ficha: Ficha; turnos: 
   useEffect(() => { setHora(horas[0] || ""); }, [horas]);
 
   async function guardar(e: FormEvent) {
-    e.preventDefault(); if (!hora) return setNota("Elegí un horario libre.");
+    e.preventDefault(); if (!hora) return setErr("Elegí un horario libre.");
     setGuardando(true);
-    const r = await fetch("/api/panel/turnos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ servicioId: srvId, recursoId: recId, fecha, hora, nombre: nombre.trim(), tel: tel.trim(), ya, pago }) }).then((x) => x.json()).catch(() => ({ ok: false, motivo: "No se pudo guardar." }));
+    const r = await fetch("/api/panel/turnos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ servicioId: srvId, recursoId: recId, fecha, hora, nombre: nombre.trim(), tel: tel.trim(), nota: notaTxt.trim(), ya, pago }) }).then((x) => x.json()).catch(() => ({ ok: false, motivo: "No se pudo guardar." }));
     setGuardando(false);
-    if (!r.ok) return setNota(r.motivo || "No se pudo guardar.");
+    if (!r.ok) return setErr(r.motivo || "No se pudo guardar.");
     onListo();
   }
   return (
@@ -559,7 +564,47 @@ function FormAgregar({ ficha, turnos, fecha, onListo }: { ficha: Ficha; turnos: 
       </div>
       <label className="check"><input type="checkbox" checked={ya} onChange={(e) => setYa(e.target.checked)} /> Ya lo atendí (cierra con el pago)</label>
       {ya && <label className="c">Cómo pagó<select value={pago} onChange={(e) => setPago(e.target.value)}>{PAGOS.map((p) => <option key={p}>{p}</option>)}</select></label>}
-      <div className="acciones"><button className="btn pri" type="submit" disabled={guardando}>Guardar</button><span className="nota mal">{nota}</span></div>
+      <label className="c">Nota (opcional)<input value={notaTxt} onChange={(e) => setNotaTxt(e.target.value)} autoComplete="off" placeholder="Solo la ves vos (ej. “quiere turno doble”)" /></label>
+      <div className="acciones"><button className="btn pri" type="submit" disabled={guardando}>Guardar</button><span className="nota mal">{err}</span></div>
+    </form>
+  );
+}
+
+/** El dueño edita un turno ya agendado (incluidos los que sacó la gente por el chat): datos, nota y reprogramación. */
+function FormEditar({ ficha, turnos, t, onListo, onCancelar }: { ficha: Ficha; turnos: Turno[]; t: Turno; onListo: () => void; onCancelar: () => void }) {
+  const [nombre, setNombre] = useState(t.nombre), [tel, setTel] = useState(t.tel), [srvId, setSrvId] = useState(t.servicioId), [recId, setRecId] = useState(t.recursoId);
+  const [fecha, setFecha] = useState(t.fecha), [hora, setHora] = useState(t.hora), [notaTxt, setNotaTxt] = useState(t.nota || ""), [err, setErr] = useState(""), [guardando, setGuardando] = useState(false);
+  const srv = ficha.servicios.find((s) => s.id === srvId);
+  const dias = useMemo(() => { const base = diasAbiertos(ficha); return base.includes(t.fecha) ? base : [t.fecha, ...base]; }, [ficha, t.fecha]);
+  const horas = useMemo(() => {
+    const ocup = turnos.filter((x) => x.estado !== "cancelado" && x.id !== t.id).map((x) => ({ id: x.id, fecha: x.fecha, hora: x.hora, dur: x.dur, recursoId: x.recursoId }));
+    const libs = libres(ficha, ocup, fecha, srv, recId).map((x) => x.hora);
+    // si editás sin cambiar de día, dejá que su propia hora siga disponible aunque ya haya pasado
+    return fecha === t.fecha && !libs.includes(t.hora) ? [t.hora, ...libs] : libs;
+  }, [ficha, turnos, fecha, srv, recId, t]);
+  useEffect(() => { setHora((h) => (horas.includes(h) ? h : horas[0] || "")); }, [horas]);
+
+  async function guardar(e: FormEvent) {
+    e.preventDefault(); if (!hora) return setErr("Elegí un horario libre.");
+    setGuardando(true);
+    const r = await fetch("/api/panel/turnos/" + t.id, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nombre: nombre.trim(), tel: tel.trim(), servicioId: srvId, recursoId: recId, fecha, hora, nota: notaTxt.trim() }) }).then((x) => x.json()).catch(() => ({ ok: false, motivo: "No se pudo guardar." }));
+    setGuardando(false);
+    if (!r.ok) return setErr(r.motivo || "No se pudo guardar.");
+    onListo();
+  }
+  return (
+    <form className="caja" style={{ width: "100%" }} onSubmit={guardar}>
+      <h3>Editar {ficha.palabra}</h3>
+      <div className="campos">
+        <label className="c">Nombre<input value={nombre} onChange={(e) => setNombre(e.target.value)} autoComplete="off" /></label>
+        <label className="c">Celular<input inputMode="tel" value={tel} onChange={(e) => setTel(e.target.value)} autoComplete="off" /></label>
+        <label className="c">Servicio<select value={srvId} onChange={(e) => setSrvId(e.target.value)}>{ficha.servicios.map((s) => <option key={s.id} value={s.id}>{s.nombre} · {precioTxt(s)}</option>)}</select></label>
+        <label className="c">{cap(ficha.recurso)}<select value={recId} onChange={(e) => setRecId(e.target.value)}>{ficha.recursos.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}</select></label>
+        <label className="c">Día<select value={fecha} onChange={(e) => setFecha(e.target.value)}>{dias.map((d) => <option key={d} value={d}>{etiquetaDia(d)}</option>)}</select></label>
+        <label className="c">Hora<select value={hora} onChange={(e) => setHora(e.target.value)}>{horas.length ? horas.map((h) => <option key={h} value={h}>{h}</option>) : <option value="">No hay horarios libres</option>}</select></label>
+      </div>
+      <label className="c">Nota (opcional)<input value={notaTxt} onChange={(e) => setNotaTxt(e.target.value)} autoComplete="off" placeholder="Solo la ves vos" /></label>
+      <div className="acciones"><button className="btn pri" type="submit" disabled={guardando}>Guardar cambios</button><button className="btn" type="button" onClick={onCancelar}>Cancelar</button><span className="nota mal">{err}</span></div>
     </form>
   );
 }

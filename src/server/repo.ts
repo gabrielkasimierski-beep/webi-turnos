@@ -118,7 +118,7 @@ export async function crearLocal(p: { nombre: string; rubroClave: string; mail: 
 /* ---------- turnos ---------- */
 const aTurno = (t: typeof turnos.$inferSelect): Turno => ({
   id: t.id, fecha: t.fecha, hora: t.hora, dur: t.dur, servicioId: t.servicioId, servicioNombre: t.servicioNombre, precio: t.precio,
-  recursoId: t.recursoId, recursoNombre: t.recursoNombre, nombre: t.nombre, tel: t.tel, estado: t.estado as Turno["estado"], pago: t.pago,
+  recursoId: t.recursoId, recursoNombre: t.recursoNombre, nombre: t.nombre, tel: t.tel, nota: t.nota, estado: t.estado as Turno["estado"], pago: t.pago,
   sena: { monto: t.senaMonto, estado: t.senaEstado as Turno["sena"]["estado"], comprobante: t.senaComprobante }, confirmado: t.confirmado,
   recordado: t.recordado ? t.recordado.toISOString() : null, origen: t.origen, creado: t.creado.toISOString(),
 });
@@ -163,7 +163,7 @@ async function upsertCliente(localId: string, nombre: string, tel: string) {
     .onConflictDoUpdate({ target: [clientes.localId, clientes.telClave], set: nombre ? { nombre } : { tel: dig(tel) } });
 }
 
-export type PedidoReserva = { servicioId: string; recursoId?: string | null; fecha: string; hora: string; nombre?: string; tel?: string; origen?: string };
+export type PedidoReserva = { servicioId: string; recursoId?: string | null; fecha: string; hora: string; nombre?: string; tel?: string; nota?: string; origen?: string };
 
 /** Valida todo con datos frescos y anota. Si dos tocan el mismo hueco a la vez, gana el primero (índice único en la base). */
 export async function reservar(localId: string, p: PedidoReserva): Promise<{ ok: true; t: Turno } | { ok: false; motivo: string }> {
@@ -186,7 +186,7 @@ export async function reservar(localId: string, p: PedidoReserva): Promise<{ ok:
   try {
     await db.insert(turnos).values({
       id, localId, fecha: p.fecha, hora: p.hora, dur: Number(srv.duracion), servicioId: srv.id, servicioNombre: srv.nombre, precio: srv.precio,
-      recursoId: rec.id, recursoNombre: rec.nombre, nombre, tel, telClave: telClave(tel), estado: "pendiente", origen: p.origen || "chat",
+      recursoId: rec.id, recursoNombre: rec.nombre, nombre, tel, telClave: telClave(tel), nota: String(p.nota || "").trim().slice(0, 500), estado: "pendiente", origen: p.origen || "chat",
       senaMonto: monto, senaEstado: monto > 0 ? "pendiente" : "no",
     });
   } catch {
@@ -198,7 +198,7 @@ export async function reservar(localId: string, p: PedidoReserva): Promise<{ ok:
 }
 
 /** Carga manual de alguien que llegó sin turno: entra directo como atendido. */
-export async function turnoAtendidoManual(localId: string, p: { servicioId: string; recursoId: string; fecha: string; hora: string; nombre?: string; tel?: string; pago: string }) {
+export async function turnoAtendidoManual(localId: string, p: { servicioId: string; recursoId: string; fecha: string; hora: string; nombre?: string; tel?: string; nota?: string; pago: string }) {
   const loc = await localPorId(localId); if (!loc) return { ok: false as const, motivo: "Local inexistente." };
   const srv = loc.ficha.servicios.find((s) => s.id === p.servicioId), rec = loc.ficha.recursos.find((r) => r.id === p.recursoId);
   if (!srv || !rec) return { ok: false as const, motivo: "Servicio o recurso inexistente." };
@@ -207,7 +207,7 @@ export async function turnoAtendidoManual(localId: string, p: { servicioId: stri
   await db.insert(turnos).values({
     id, localId, fecha: p.fecha, hora: p.hora, dur: srv.duracion, servicioId: srv.id, servicioNombre: srv.nombre, precio: srv.precio,
     recursoId: rec.id, recursoNombre: rec.nombre, nombre: String(p.nombre || "").trim().slice(0, 60), tel, telClave: telClave(tel),
-    estado: "atendido", pago: p.pago, origen: "local", cerrado: new Date(),
+    nota: String(p.nota || "").trim().slice(0, 500), estado: "atendido", pago: p.pago, origen: "local", cerrado: new Date(),
   }).onConflictDoNothing();
   await upsertCliente(localId, String(p.nombre || "").trim(), tel);
   return { ok: true as const };
@@ -238,6 +238,49 @@ export async function cambiarTurno(localId: string, id: string, c: Cambios) {
     const filas = await db.update(turnos).set(set).where(and(eq(turnos.id, id), eq(turnos.localId, localId))).returning({ id: turnos.id });
     return filas.length > 0; // 0 filas = el turno no es de este local
   } catch { return false; } // p. ej. volver a pendiente un hueco que ya se ocupó
+}
+
+export type EdicionTurno = Partial<{ nombre: string; tel: string; nota: string; servicioId: string; recursoId: string; fecha: string; hora: string }>;
+/** El dueño edita un turno suyo (incluidos los que sacó la gente por el chat): datos del cliente, nota,
+    y reprogramación de servicio/profesional/día/hora. Si cambia el horario, revalida el hueco como una reserva. */
+export async function editarTurno(localId: string, id: string, e: EdicionTurno): Promise<{ ok: true } | { ok: false; motivo: string }> {
+  const db = await getDb();
+  const [row] = await db.select().from(turnos).where(and(eq(turnos.id, id), eq(turnos.localId, localId)));
+  if (!row) return { ok: false, motivo: "No encontré ese turno." };
+  if (row.estado === "cancelado") return { ok: false, motivo: "El turno está cancelado." };
+  const loc = await localPorId(localId); if (!loc) return { ok: false, motivo: "Local inexistente." };
+  const f = loc.ficha, ahora = ahoraAR();
+  const set: Partial<typeof turnos.$inferInsert> = {};
+  if (e.nombre !== undefined) set.nombre = String(e.nombre).trim().slice(0, 60);
+  if (e.tel !== undefined) { const tel = String(e.tel).trim().slice(0, 30); set.tel = tel; set.telClave = telClave(tel); }
+  if (e.nota !== undefined) set.nota = String(e.nota).trim().slice(0, 500);
+
+  const srvId = e.servicioId ?? row.servicioId, recPedido = e.recursoId ?? row.recursoId;
+  const fecha = e.fecha ?? row.fecha, hora = e.hora ?? row.hora;
+  const reprograma = fecha !== row.fecha || hora !== row.hora || recPedido !== row.recursoId || srvId !== row.servicioId;
+  if (reprograma) {
+    const srv = f.servicios.find((s) => s.id === srvId);
+    if (!srv) return { ok: false, motivo: "Ese servicio no existe." };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha) || !/^\d{2}:\d{2}$/.test(hora)) return { ok: false, motivo: "Fecha u hora inválida." };
+    if (!diasAbiertos(f, ahora).includes(fecha)) return { ok: false, motivo: "Ese día no se puede agendar." };
+    // ocupación sin contar este mismo turno, así no choca consigo mismo
+    const ocup = (await ocupacion(localId)).filter((o) => !(o.recursoId === row.recursoId && o.fecha === row.fecha && o.hora === row.hora));
+    const hueco = libres(f, ocup, fecha, srv, recPedido || null, ahora).find((x) => x.hora === hora);
+    if (!hueco) return { ok: false, motivo: "Ese horario ya no está libre." };
+    const rec = f.recursos.find((r) => r.id === hueco.recursoId)!;
+    set.servicioId = srv.id; set.servicioNombre = srv.nombre; set.precio = srv.precio; set.dur = Number(srv.duracion);
+    set.recursoId = rec.id; set.recursoNombre = rec.nombre; set.fecha = fecha; set.hora = hora;
+  }
+
+  if (!Object.keys(set).length) return { ok: true };
+  try {
+    const filas = await db.update(turnos).set(set).where(and(eq(turnos.id, id), eq(turnos.localId, localId))).returning({ id: turnos.id });
+    if (!filas.length) return { ok: false, motivo: "No se pudo guardar." };
+    if (set.nombre !== undefined || set.tel !== undefined) await upsertCliente(localId, set.nombre ?? row.nombre, set.tel ?? row.tel);
+    return { ok: true };
+  } catch {
+    return { ok: false, motivo: "Ese horario se acaba de ocupar." };
+  }
 }
 
 /* ---------- lo que hace el cliente (identificado por teléfono) ---------- */
