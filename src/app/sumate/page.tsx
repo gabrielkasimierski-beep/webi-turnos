@@ -26,7 +26,7 @@ export default function Sumate() {
       <header style={{ display: "grid", gap: 14, textAlign: "center", justifyItems: "center" }}>
         <MarcaWebi fontSize="2.5rem" />
         <span style={{ fontSize: ".82rem", fontWeight: 600, color: "var(--brand-text)", background: "var(--brand-soft)", border: "1px solid color-mix(in srgb,var(--brand) 35%,var(--line))", borderRadius: 999, padding: "5px 14px" }}>
-          {DIAS_PRUEBA} días gratis · sin tarjeta
+          {DIAS_PRUEBA} días gratis de prueba
         </span>
         <h1 style={{ margin: 0, font: "800 1.9rem/1.08 var(--f-marca)", letterSpacing: "-.02em", textWrap: "balance" }}>
           Tu agenda de turnos, sin perder clientes
