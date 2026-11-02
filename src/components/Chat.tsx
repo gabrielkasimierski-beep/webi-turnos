@@ -633,6 +633,11 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
 
   /* ---------- lo que llega por la caja de texto ---------- */
   function alRecibir(raw: string) {
+    // Órdenes de navegación por texto (además de los botones fijos de abajo).
+    const nav = norm(raw).trim();
+    if (/^(atras|volver atras|un paso atras|paso atras|back|volve atras)$/.test(nav)) { const a = pasoAtras(); return a ? a() : reiniciar(); }
+    if (/^(menu|volver|volver al menu|volver al inicio|inicio|al inicio|empezar de nuevo|empezar de 0|empezar de cero|empecemos de nuevo|arrancar de nuevo|arranquemos de nuevo|reiniciar|de nuevo|cancelar todo)$/.test(nav)) return reiniciar();
+
     const fl = flujo();
     const e = entender(raw, F(), ahoraAR(), { espera: fl?.espera, ultimoServicioId: R.current.ultimoSrvId || mem().servicioId });
     if (e.servicioId) {
@@ -981,6 +986,47 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
   }
   function cancelarFlujo() { setFlujo(null); bot(["Listo, lo dejamos para otro momento 👍 Cuando quieras, acá estoy."]); setTimeout(menuChips, 500); }
   function preguntar(t: string, items: Chip[]) { bot([t]); setTimeout(() => chipsSet(items.concat([{ texto: "Cancelar", hacer: cancelarFlujo }])), 450); }
+
+  /* Vuelve al menú principal desde donde esté (botón fijo "Empezar de nuevo"). */
+  function reiniciar() {
+    R.current.accionSi = null;
+    setPropuesta(null); setFlujo(null); setChips([]);
+    bot(["Dale, arrancamos de nuevo 👍 ¿Con qué te ayudo?"]);
+    setTimeout(menuChips, 450);
+  }
+
+  /* ¿Se puede volver un paso atrás en el armado del turno? Devuelve la acción, o null. */
+  function pasoAtras(): (() => void) | null {
+    const fl = flujo();
+    if (!fl || fl.modo || !["recurso", "fecha", "hora", "nombre", "tel"].includes(fl.espera || "")) return null;
+    const fi = F(), multiSrv = fi.servicios.length > 1, multiRec = fi.recursos.length > 1;
+    // No ofrecer "atrás" si el paso anterior no existe (p. ej. un solo servicio y un solo recurso).
+    if (fl.espera === "recurso" && !multiSrv) return null;
+    if (fl.espera === "fecha" && !multiRec && !multiSrv) return null;
+    return atras;
+  }
+
+  /* Borra el último dato cargado y vuelve a preguntar ese paso. */
+  function atras() {
+    const fl = flujo();
+    if (!fl) return reiniciar();
+    const fi = F(), multiSrv = fi.servicios.length > 1, multiRec = fi.recursos.length > 1;
+    burbuja("yo", "← Atrás");
+    setChips([]);
+    switch (fl.espera) {
+      case "recurso": fl.servicioId = null; fl.recursoId = undefined; break;
+      case "fecha":
+        if (multiRec) fl.recursoId = undefined;
+        else if (multiSrv) { fl.servicioId = null; fl.recursoId = undefined; }
+        break;
+      case "hora": fl.fecha = null; fl.hora = null; fl.franja = null; fl.pagHora = 0; break;
+      case "nombre": fl.hora = null; fl.franja = null; fl.pagHora = 0; break;
+      case "tel": fl.nombre = undefined; break;
+      default: return reiniciar();
+    }
+    setFlujo(fl);
+    setTimeout(() => avanzar(), 200);
+  }
 
   /* --- cancelar, cambiar, confirmar o subir comprobante de un turno ya sacado --- */
   function preguntarG(t: string, items: Chip[]) { bot([t]); setTimeout(() => chipsSet(items.concat([{ texto: "Volver al menú", hacer: cancelarFlujo }])), 450); }
@@ -1630,6 +1676,12 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
         </div>
         <div className="chips">
           {chips.map((c, i) => <button key={i} type="button" className={"chip" + (c.lleno ? " lleno" : "")} onClick={c.hacer}>{c.texto}</button>)}
+          {(pasoAtras() || flujo() || prop || msgs.length > 2) && (
+            <div className="nav-fijo" style={{ display: "flex", gap: 8, flexWrap: "wrap", width: "100%", marginTop: 2, opacity: 0.9 }}>
+              {pasoAtras() && <button type="button" className="chip" onClick={atras}>← Atrás</button>}
+              {(flujo() || prop || msgs.length > 2) && <button type="button" className="chip" onClick={reiniciar}>↩︎ Empezar de nuevo</button>}
+            </div>
+          )}
           {prop && (
             <div className="propuesta">
               <div>

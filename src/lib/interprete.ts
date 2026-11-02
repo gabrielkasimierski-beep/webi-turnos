@@ -448,9 +448,10 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
   // 9) Intenciones de gestión y consulta
   e.cancelarTurno = hay(
     " cancelar mi ", " cancelar el turno ", " cancelar la reserva ", " dar de baja ",
-    " no voy a poder ", " no voy a ir ", " no puedo ir ",
+    " no voy a poder ", " no voy a ir ", " no puedo ir ", " no voy a poder ir ", " ya no voy ", " ya no quiero ir ",
+    " me arrepenti ", " me surgio algo ", " me surgio un imprevisto ",
     " cambiar mi turno ", " cambiar el turno ", " cambiar mi reserva ", " cambiar la reserva ",
-    " reprogramar ", " pasar mi turno ", " mover mi turno ",
+    " reprogramar ", " pasar mi turno ", " mover mi turno ", " correr mi turno ", " cambiar de horario mi ",
   );
   e.confirmar =
     !e.cancelarTurno &&
@@ -489,10 +490,14 @@ export function entender(raw: string, f: Ficha, ahora: Date = new Date(), ctx?: 
   ) {
     e.info = "comprobante";
   } else if (
-    hay(
+    (hay(
       " a que hora tengo ", " cuando tengo turno ", " cuando es mi turno ", " cuando es mi reserva ",
-      " me olvide mi turno ", " me olvide la hora ", " tengo turno ", " mis turnos ", " mi reserva ",
-    ) && !e.cancelarTurno && !e.confirmar
+      " me olvide mi turno ", " me olvide la hora ", " tengo turno ", " mis turnos ", " mi turno ",
+      " mi reserva ", " mis reservas ", " ver mi turno ", " ver mis turnos ", " revisar mi turno ",
+      " chequear mi turno ", " que turno tengo ", " tengo algo sacado ", " tengo reservado ",
+    ) ||
+      / (ya )?(tengo|tenia|saque|reserve|agende|anote|tome|hice) (un |una |mi |el |la )?(turno|reserva|cita) /.test(t)) &&
+    !e.cancelarTurno && !e.confirmar
   ) {
     e.info = "mis_turnos";
   } else if (
