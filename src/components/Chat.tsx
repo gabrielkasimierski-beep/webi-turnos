@@ -104,6 +104,7 @@ type Flujo = {
   tel?: string;
   espera?: string;
   modo?: string;
+  turnos?: Turno[];
   rerender?: () => void;
 };
 
@@ -995,10 +996,14 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
     setTimeout(menuChips, 450);
   }
 
-  /* ¿Se puede volver un paso atrás en el armado del turno? Devuelve la acción, o null. */
+  /* ¿Se puede volver un paso atrás? Devuelve la acción, o null. */
   function pasoAtras(): (() => void) | null {
     const fl = flujo();
-    if (!fl || fl.modo || !["recurso", "fecha", "hora", "nombre", "tel"].includes(fl.espera || "")) return null;
+    if (!fl) return null;
+    // Gestión de un turno ya sacado: desde "elegir" o "acción" se puede volver un paso.
+    if (fl.modo) return fl.espera === "elegir" || fl.espera === "accion" ? atras : null;
+    // Armado de un turno nuevo.
+    if (!["recurso", "fecha", "hora", "nombre", "tel"].includes(fl.espera || "")) return null;
     const fi = F(), multiSrv = fi.servicios.length > 1, multiRec = fi.recursos.length > 1;
     // No ofrecer "atrás" si el paso anterior no existe (p. ej. un solo servicio y un solo recurso).
     if (fl.espera === "recurso" && !multiSrv) return null;
@@ -1006,13 +1011,33 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
     return atras;
   }
 
-  /* Borra el último dato cargado y vuelve a preguntar ese paso. */
+  function pedirTelGestion() {
+    const fl = flujo(); if (!fl) return;
+    fl.espera = "tel-gestion"; fl.tel = undefined; fl.turnos = undefined; fl.rerender = undefined;
+    setFlujo(fl);
+    preguntarG(fl.modo === "fidelidad" ? "Dale, pasame tu celular y me fijo cuántas visitas llevás." : "Dale, pasame el celular con el que sacaste " + elTurno() + " y lo busco.", []);
+  }
+
+  /* Vuelve un paso: en el armado borra el último dato; en la gestión vuelve a la lista o al celular. */
   function atras() {
     const fl = flujo();
     if (!fl) return reiniciar();
-    const fi = F(), multiSrv = fi.servicios.length > 1, multiRec = fi.recursos.length > 1;
     burbuja("yo", "← Atrás");
     setChips([]);
+
+    // Gestión (cancelar / cambiar / confirmar un turno ya sacado)
+    if (fl.modo) {
+      if (fl.espera === "accion" && fl.turnos && fl.turnos.length > 1) {
+        const ts = fl.turnos;
+        fl.espera = "elegir"; fl.rerender = () => listarGestion(ts);
+        setFlujo(fl);
+        return void setTimeout(() => listarGestion(ts), 200);
+      }
+      return void setTimeout(pedirTelGestion, 200); // desde la lista, o con un solo turno: volver a pedir el celular
+    }
+
+    // Armado de un turno nuevo
+    const fi = F(), multiSrv = fi.servicios.length > 1, multiRec = fi.recursos.length > 1;
     switch (fl.espera) {
       case "recurso": fl.servicioId = null; fl.recursoId = undefined; break;
       case "fecha":
@@ -1072,6 +1097,7 @@ export default function Chat({ slug, fichaInicial, ocupacionInicial }: { slug: s
         600,
       );
     }
+    fl.turnos = ts; // los recordamos para poder volver atrás a la lista
     if (fl.modo === "confirmar" && ts.length === 1) return confirmarTurnoChat(ts[0]);
     if (ts.length === 1) {
       fl.espera = "accion";
