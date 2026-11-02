@@ -325,7 +325,7 @@ export async function subirComprobanteCliente(localId: string, id: string, tel: 
     return { ok: false as const, motivo: "Ese lugar ya no está reservado: venció el tiempo para mandar la seña o se canceló. Sacá uno nuevo y subí el comprobante enseguida." };
   }
   if (!t || t.estado !== "pendiente" || t.senaMonto <= 0) return { ok: false as const, motivo: "No encontré ese turno pendiente de seña." };
-  if (t.senaEstado === "recibida") return { ok: true as const };
+  if (t.senaEstado === "recibida") return { ok: true as const, montoVerificado: true, fechaVerificada: true };
 
   // El mismo archivo no puede usarse como seña de dos turnos.
   const [repetido] = await db.select({ id: turnos.id }).from(turnos)
@@ -342,7 +342,7 @@ export async function subirComprobanteCliente(localId: string, id: string, tel: 
   if (!verif.ok) return verif;
 
   await db.update(turnos).set({ senaEstado: "declarada", senaComprobante: imagenDataUrl }).where(eq(turnos.id, t.id));
-  return { ok: true as const };
+  return { ok: true as const, montoVerificado: verif.montoVerificado, fechaVerificada: verif.fechaVerificada };
 }
 
 /* ---------- fidelidad: contador por teléfono ---------- */

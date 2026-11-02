@@ -4,7 +4,7 @@
    fecha esperados. Es un pre-chequeo: un comprobante editado puede pasar, por
    eso la seña queda "declarada" hasta que el dueño confirma que le llegó.
    ===================================================================== */
-import { desdeIso, etiquetaDia, norm, plata } from "./negocio";
+import { norm, plata } from "./negocio";
 
 const MESES: Record<string, number> = {
   ene: 1, enero: 1,
@@ -141,6 +141,26 @@ export function verificarMontoEnTexto(textoCrudo: string, montoEsperado: number)
     if (ok) break;
   }
 
+  // El importe suele ir SOLO en su propio renglón y bien grande (es lo que el OCR peor lee y a veces le come el "$").
+  // Si una línea se reduce a exactamente el monto esperado (con separador de miles AR o sin él, opcional ",00"),
+  // lo tomamos como válido aunque el símbolo se haya perdido o leído mal.
+  if (!ok) {
+    const objetivos = new Set([plano, ...conSeparador].map((s) => s.replace(/[.\s]/g, "")));
+    let pos = 0;
+    for (const linea of textoCrudo.split(/\r?\n/)) {
+      const idx = textoCrudo.indexOf(linea, pos);
+      pos = idx + linea.length;
+      // Un renglón de importe trae moneda + número y nada más. Saco los símbolos de moneda;
+      // si después queda más de una letra, es una frase (ej. "Saldo disponible 3.000") y no lo tomamos.
+      const sinMoneda = norm(linea).replace(/ar\$|u\$s|ars|\$|pesos?/g, " ");
+      if ((sinMoneda.match(/[a-z]/g) || []).length > 1) continue; // tolera 1 letra suelta: el "$" mal leído como "s"
+      const limpia = sinMoneda.replace(/[^0-9.,]/g, "").replace(/\s+/g, "");
+      const mm = /^(\d{1,3}(?:[.,]\d{3})+|\d{1,8})(?:[.,]00)?$/.exec(limpia);
+      const digIdx = idx + Math.max(0, linea.search(/\d/));
+      if (mm && objetivos.has(mm[1].replace(/[.,]/g, "")) && !enContextoNoImporte(textoCrudo, digIdx)) { ok = true; break; }
+    }
+  }
+
   // Montos explícitos con "$" o "ARS" para informar si transfirió otro importe
   const detectados = new Set<number>();
   const rePlata = /(?:\$|ars|importe|monto|total)\s*[:.]?\s*(\d{1,3}(?:[.,]\d{3})+|\d{3,8})(?:[.,]\d{2})?\b/gi;
@@ -202,8 +222,11 @@ export function destinoEnTexto(textoCrudo: string, d: Destino): boolean | null {
 }
 
 export type ResultadoComprobante =
-  | { ok: true; monto: number; fecha: string }
+  | { ok: true; monto: number; fecha: string; montoVerificado: boolean; fechaVerificada: boolean }
   | { ok: false; motivo: string };
+
+/** Palabras que muestran que la imagen es una transferencia hecha (no un resumen de cuenta, saldo, etc.). */
+const HACE_TRANSFERENCIA = /transferenci|transferiste|transferido|enviaste|enviada|enviado|envio de dinero|pago enviado|pago exitoso|pago realizado|operacion (realizada|exitosa|aprobada|confirmada)|comprobante/;
 
 /**
  * Valida que el texto extraído del comprobante:
@@ -247,52 +270,53 @@ export function validarTextoComprobante(
   const fechaCoincide = fechasLeidas.find((f) => fechasValidas.includes(f));
 
   const { ok: montoOk, montosDetectados } = verificarMontoEnTexto(textoCrudo, montoEsperado);
+  const destinoRes = destino ? destinoEnTexto(textoCrudo, destino) : null;
 
-  if (!montoOk && !fechaCoincide) {
-    const detalleMonto = montosDetectados.length
-      ? `figura ${plata(montosDetectados[0])} en vez de ${plata(montoEsperado)}`
-      : `no encuentro el importe de ${plata(montoEsperado)}`;
-    const detalleFecha = fechasLeidas.length
-      ? `la fecha leída (${etiquetaDia(fechasLeidas[0], desdeIso(fechasValidas[0]))}) no coincide`
-      : "no se llega a leer la fecha de hoy";
-    return {
-      ok: false,
-      motivo: `El comprobante no coincide: ${detalleMonto} y ${detalleFecha}. Revisá que sea el comprobante de hoy por ${plata(montoEsperado)}.`,
-    };
-  }
+  // ─── 1) CONTRADICCIONES: lo que está positivamente MAL se rechaza siempre ───
 
-  if (!montoOk) {
-    const otro = montosDetectados.find((x) => x !== montoEsperado);
-    return {
-      ok: false,
-      motivo: otro
-        ? `En el comprobante figura un importe de ${plata(otro)}, pero la seña es de ${plata(montoEsperado)}.`
-        : `No pude encontrar el importe de ${plata(montoEsperado)} en el comprobante. Asegurate de que se vea completo.`,
-    };
-  }
-
-  if (!fechaCoincide) {
-    if (fechasLeidas.length > 0) {
-      const [y, m, d] = fechasLeidas[0].split("-");
-      const [yh, mh, dh] = (fechasValidas[0] || "").split("-");
-      return {
-        ok: false,
-        motivo: `La fecha del comprobante (${d}/${m}/${y}) no coincide con la fecha de hoy (${dh}/${mh}/${yh}). Subí el comprobante de la transferencia de hoy.`,
-      };
-    }
-    return {
-      ok: false,
-      motivo: "No pude leer la fecha en el comprobante. Subí la captura completa donde se vean el importe y la fecha de hoy.",
-    };
-  }
-
-  if (destino && destinoEnTexto(textoCrudo, destino) === false) {
-    const quien = [destino.titular || destino.nombreLocal, destino.alias].filter(Boolean).join(" · ");
+  // Destinatario equivocado: la plata fue a otra persona/alias/cuenta.
+  if (destinoRes === false) {
+    const quien = [destino!.titular || destino!.nombreLocal, destino!.alias].filter(Boolean).join(" · ");
     return {
       ok: false,
       motivo: `En el comprobante no figura que la transferencia sea para el local (${quien}). Revisá que hayas transferido al alias correcto y subí la captura completa, donde se vea a quién le enviaste.`,
     };
   }
 
-  return { ok: true, monto: montoEsperado, fecha: fechaCoincide };
+  // Importe distinto: leímos un monto explícito y no es el esperado.
+  const otroMonto = montosDetectados.find((x) => x !== montoEsperado);
+  if (!montoOk && otroMonto) {
+    return { ok: false, motivo: `En el comprobante figura un importe de ${plata(otroMonto)}, pero la seña es de ${plata(montoEsperado)}.` };
+  }
+
+  // Fecha vieja: leímos fecha(s) y ninguna es la de hoy (evita reusar un comprobante de otro día).
+  if (fechasLeidas.length > 0 && !fechaCoincide) {
+    const [y, m, d] = fechasLeidas[0].split("-");
+    const [yh, mh, dh] = (fechasValidas[0] || "").split("-");
+    return {
+      ok: false,
+      motivo: `La fecha del comprobante (${d}/${m}/${y}) no coincide con la fecha de hoy (${dh}/${mh}/${yh}). Subí el comprobante de la transferencia de hoy.`,
+    };
+  }
+
+  // ─── 2) CONFIRMACIONES: alcanza con una, porque el dueño confirma que la plata entró ───
+  // (el OCR del celular a veces no lee el número grande ni la fecha; no por eso rechazamos un pago real).
+  const hayConfirmacion = montoOk || !!fechaCoincide || destinoRes === true;
+  const esTransferencia = HACE_TRANSFERENCIA.test(t);
+  if (!hayConfirmacion || !(esTransferencia || montoOk)) {
+    return {
+      ok: false,
+      motivo: !fechasLeidas.length
+        ? "No llego a leer el importe ni la fecha del comprobante. Subí una captura nítida y completa donde se vean el importe, la fecha y a quién le transferiste."
+        : "No pude confirmar los datos del comprobante. Subí la captura completa del comprobante de la transferencia.",
+    };
+  }
+
+  return {
+    ok: true,
+    monto: montoEsperado,
+    fecha: fechaCoincide || fechasValidas[0] || "",
+    montoVerificado: montoOk,
+    fechaVerificada: !!fechaCoincide,
+  };
 }

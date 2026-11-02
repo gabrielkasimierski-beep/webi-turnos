@@ -25,7 +25,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ slug: s
       await Promise.race([
         enviarPushLocal(loc.localId, {
           title: `🧾 Seña por confirmar · ${loc.ficha.nombre}`,
-          body: `Un cliente subió el comprobante de su ${pal}. Revisá en tu cuenta que te haya llegado y marcala como recibida.`,
+          body: r.montoVerificado
+            ? `Un cliente subió el comprobante de su ${pal}. Revisá en tu cuenta que te haya llegado y marcala como recibida.`
+            : `Un cliente subió el comprobante de su ${pal}, pero no pudimos leer el importe automáticamente. Revisá en tu cuenta que te haya llegado la seña completa y marcala como recibida.`,
           tag: "sena-" + id,
           url: "/panel",
           icon: iconoUrl,

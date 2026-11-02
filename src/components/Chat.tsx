@@ -40,11 +40,46 @@ function prepararComprobante(file: File): Promise<string> {
 /** Lee el texto del comprobante EN EL CELULAR del cliente (tesseract.js en el navegador).
     Así el servidor no corre OCR (evita los cortes por timeout en Vercel). El worker se reusa. */
 let ocrWorker: Promise<import("tesseract.js").Worker> | null = null;
+
+/** Agranda la captura (lo chico el OCR lo lee mal, sobre todo el importe grande) y la pasa a gris con más contraste.
+    Si algo falla, devuelve la imagen original. */
+function prepararImagenOCR(dataUrl: string): Promise<string> {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const minW = 1600, maxW = 2200;
+          let w = img.width, h = img.height;
+          if (w < minW) { const f = Math.min(minW / w, 4); w = Math.round(w * f); h = Math.round(h * f); }
+          if (w > maxW) { const f = maxW / w; w = maxW; h = Math.round(h * f); }
+          const c = document.createElement("canvas"); c.width = w; c.height = h;
+          const x = c.getContext("2d");
+          if (!x) return resolve(dataUrl);
+          x.imageSmoothingQuality = "high";
+          x.drawImage(img, 0, 0, w, h);
+          const im = x.getImageData(0, 0, w, h), d = im.data;
+          for (let i = 0; i < d.length; i += 4) {
+            const g = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            const v = g < 128 ? g * 0.7 : 255 - (255 - g) * 0.7; // más contraste claro/oscuro
+            d[i] = d[i + 1] = d[i + 2] = v;
+          }
+          x.putImageData(im, 0, 0);
+          resolve(c.toDataURL("image/png"));
+        } catch { resolve(dataUrl); }
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    } catch { resolve(dataUrl); }
+  });
+}
+
 async function leerComprobanteEnCelular(dataUrl: string): Promise<string> {
   if (!ocrWorker) ocrWorker = import("tesseract.js").then(({ createWorker }) => createWorker("spa"));
   try {
     const w = await ocrWorker;
-    const { data } = await w.recognize(dataUrl);
+    const img = await prepararImagenOCR(dataUrl);
+    const { data } = await w.recognize(img);
     return data.text || "";
   } catch {
     ocrWorker = null; // si falló, que se recree la próxima
