@@ -10,18 +10,21 @@ import { crearLocal, guardarFicha, localPorSlug, reservar, turnoAtendidoManual, 
 
 const dia = (offset: number) => { const d = ahoraAR(); d.setDate(d.getDate() + offset); return iso(d); };
 
+/** WhatsApp de contacto de Webi: el mismo que ve el cliente en la demo. */
+const WA_SOPORTE = "5491156328481";
+
 export async function sembrar() {
   const hashDemo = hashearClave("demo1234");
   const db = await getDb();
 
   const faroExistente = await localPorSlug("barberia-el-faro");
   if (!faroExistente) {
-    const { id } = await crearLocal({ nombre: "Barbería El Faro", rubroClave: "barberia", mail: "demo@webi.local", claveHash: hashDemo, whatsapp: "5491155550000" });
+    const { id } = await crearLocal({ nombre: "Barbería El Faro", rubroClave: "barberia", mail: "demo@webi.local", claveHash: hashDemo, whatsapp: WA_SOPORTE });
     const loc = (await localPorSlug("barberia-el-faro"))!;
     const f = {
       ...loc.ficha,
       direccion: "Av. Corrientes 1234, CABA",
-      whatsapp: "5491155550000",
+      whatsapp: WA_SOPORTE,
       instagram: "@barberiaelfaro",
       sena: { ...loc.ficha.sena, activa: true, obligatoria: false, tipo: "porcentaje" as const, monto: 30, alias: "barberia.faro.mp", nota: "A nombre de Barbería El Faro" },
       fidelidad: { activa: true, cadaCuantos: 5, premio: "un corte gratis" },
@@ -44,6 +47,11 @@ export async function sembrar() {
         ...faroExistente.ficha,
         sena: { ...faroExistente.ficha.sena, activa: true, obligatoria: false, tipo: "porcentaje", monto: 30, alias: "barberia.faro.mp", nota: "A nombre de Barbería El Faro" },
       });
+    }
+    // La demo va sin foto propia (usa el ícono) y con el WhatsApp de Webi.
+    const faro2 = (await localPorSlug("barberia-el-faro"))!;
+    if (faro2.ficha.logo || faro2.ficha.whatsapp !== WA_SOPORTE) {
+      await guardarFicha(faro2.id, { ...faro2.ficha, logo: "", whatsapp: WA_SOPORTE });
     }
   }
 

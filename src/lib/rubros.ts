@@ -56,6 +56,10 @@ export const RUBROS: Record<string, Rubro> = {
     recursos: ["Dra. Vera", "Dr. Pérez"], servicios: [["Consulta", 12000, 30, "consulta, control, revisación"], ["Limpieza", 18000, 45, "limpieza, sarro, profilaxis"], ["Arreglo / caries", 25000, 60, "caries, arreglo, empaste, tapar"], ["Blanqueamiento", 40000, 90, "blanqueamiento, blanquear, blanqueo"]],
     horarios: semana("08:00", "20:00", [1, 2, 3, 4, 5]),
     faqs: [["¿Atienden por obra social?", "Trabajamos en forma particular y te damos factura para el reintegro."], ["¿Atienden niños?", "Sí, atendemos a toda la familia."]] },
+  otro: { rubro: "Otro", nombre: "Mi negocio", color: "#4C6A8A", palabra: "turno", recurso: "profesional",
+    recursos: ["Profesional 1", "Profesional 2"], servicios: [["Servicio 1", 0, 30, ""], ["Servicio 2", 0, 60, ""]],
+    horarios: semana("09:00", "19:00", [1, 2, 3, 4, 5, 6]),
+    faqs: [["¿Cómo saco un turno?", "Elegí el servicio y el horario que prefieras y te lo confirmamos al toque."], ["¿Puedo cambiar o cancelar un turno?", "Sí, escribinos y lo resolvemos sin problema."]] },
 };
 
 /** Seña de ejemplo por rubro: canchas, restaurantes y tatuajes la piden. */
